@@ -1,0 +1,234 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Result · Eduardus Kent Sutanza · 2026 Q3</title>
+<style>
+:root{
+/* ===== SHARED VISUAL CONTRACT — identical across all six People System files ===== */
+--canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;
+--kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+--lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;--lo-bg:#fbeae5;--hi-bg:#e9f6f1;}
+*{box-sizing:border-box}
+:focus-visible{outline:2px solid var(--kpi);outline-offset:2px}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;font-feature-settings:"tnum" 1}
+.wrap{max-width:860px;margin:0 auto;padding:32px 22px 80px}
+.doc{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--kpi);border-radius:14px;overflow:hidden}
+.head{padding:24px 26px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--kpi)}
+h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:6px 0 0}
+.meta{font-size:13px;color:var(--muted);margin-top:6px}
+.meta b{color:var(--ink);font-weight:600}
+.official{text-align:center;flex:0 0 auto}
+.official .scorebox{border-radius:14px;padding:13px 22px;min-width:132px;background:#fff;border:1.5px solid var(--line);box-shadow:0 6px 18px rgba(23,25,29,.07)}
+.official .scorebox.n-lo{border-color:#f0c2b5;background:#fdf3f0}
+.official .scorebox.n-mid{border-color:#ecd7ac;background:#fbf4e7}
+.official .scorebox.n-hi{border-color:#bde5d6;background:#eff9f4}
+.official .lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.official .big{font-size:46px;font-weight:800;letter-spacing:-.03em;line-height:1;color:var(--ink)}
+.official .scorebox.n-lo .big{color:#c4381d}.official .scorebox.n-mid .big{color:#b45309}.official .scorebox.n-hi .big{color:#1c8a68}
+.official .sub{font-size:11.5px;color:var(--muted);margin-top:3px;font-weight:600}
+.section{padding:22px 26px;border-bottom:1px solid var(--line)}
+.section:last-child{border-bottom:none}
+.stitle{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+.calib{display:flex;gap:16px;align-items:center;background:#fafafb;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:4px}
+.calib .c{font-size:13px;color:var(--muted);position:relative;padding-right:16px} .calib .c b{color:var(--ink)}
+.calib .c:not(:last-child):after{content:"";position:absolute;right:0;top:2px;bottom:2px;width:1px;background:var(--line)}
+.calib .c.gap b{color:var(--pip)}
+.calib .c.spv b{color:var(--kpi)}
+.calib .c.self b{color:#5b6472}
+.chip{display:inline-block;min-width:24px;text-align:center;color:#fff;border-radius:6px;padding:1px 7px;font-weight:700;font-size:12px}
+.chip.lo{background:var(--lo)}.chip.mid{background:var(--mid);color:#3d2c00}.chip.hi{background:var(--hi)}
+/* category header: KPI counts supervisor only — self chip stays neutral, band color on supervisor */
+.catscores .chip{background:#eef0f2;color:var(--muted)}
+.catscores .chip~.chip.lo{background:var(--lo);color:#fff}
+.catscores .chip~.chip.mid{background:var(--mid);color:#3d2c00}
+.catscores .chip~.chip.hi{background:var(--hi);color:#fff}
+.cat{margin-bottom:18px}
+.cathd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.catname{font-weight:700;font-size:14.5px}
+.catscores{font-size:12px} .mut{color:var(--muted);margin:0 3px 0 8px}
+.bar{height:9px;background:#eef0f2;border-radius:99px;overflow:hidden;margin-bottom:10px}
+.fill{height:100%;border-radius:99px} .fill.lo{background:linear-gradient(90deg,#f0653d,#d5371c)}.fill.mid{background:linear-gradient(90deg,#f7cf4d,#e3a008)}.fill.hi{background:linear-gradient(90deg,#2ec295,#1f9a74)}
+.mtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.mtable th{text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--line)}
+.mtable td{padding:6px 8px;border-bottom:1px solid #f1f2f4;vertical-align:top}
+.mtable td.mn{font-weight:500} .mtable td.sc{width:44px;text-align:center} .mtable td.nt{color:var(--muted);width:38%}
+.frow{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.farea{font-weight:650;font-size:14px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.pri{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:5px}
+.pri.high{color:var(--lo);background:var(--lo-bg)}.pri.medium{color:#b45309;background:#fdf3e8}.pri.low{color:var(--muted);background:#f1f1f2}
+.fgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;font-size:12.5px}
+@media(max-width:640px){.fgrid{grid-template-columns:1fr}.fgrid>div{padding:10px 0 0!important}.fgrid>div+div{border-left:0!important;border-top:1px solid var(--line);margin-top:6px}}
+.fgrid .k{display:block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.fgrid>div{padding:0 16px;position:relative}
+.fgrid>div:first-child{padding-left:0}
+.fgrid>div+div{border-left:1px solid var(--line)}
+.fgrid .k{display:flex!important;align-items:center;gap:6px}
+.fgrid .k:before{content:"";width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:var(--muted)}
+.fgrid>div:nth-child(2) .k{color:var(--kpi)}.fgrid>div:nth-child(2) .k:before{background:var(--kpi)}
+.fgrid>div:nth-child(3) .k{color:var(--hi)}.fgrid>div:nth-child(3) .k:before{background:var(--hi)}
+.written{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:640px){.written{grid-template-columns:1fr}}
+.wcard{border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.wcard.e{border-left:3px solid var(--mid)} .wcard.s{border-left:3px solid var(--kpi)}
+.wcard .who{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.wcard .row{margin-bottom:9px} .wcard .row:last-child{margin-bottom:0}
+.wcard .lab{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--muted)} .wcard .val{font-size:13px;margin-top:2px}
+.wcard .lab:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 auto}
+.wcard .row:nth-child(2) .lab{color:var(--hi)}
+.wcard .row:nth-child(3) .lab{color:var(--pip)}
+.wcard .row:nth-child(4) .lab{color:var(--kpi)}
+.foot{padding:16px 26px;font-size:11.5px;color:var(--muted);background:#fafafb}
+.print{text-align:right;max-width:860px;margin:0 auto;padding:0 22px}
+.pbtn{font:inherit;font-size:12px;font-weight:600;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 13px;cursor:pointer;margin-bottom:10px}
+@media print{body{background:#fff}.print{display:none}.doc{border:none}}
+</style></head><body>
+<div class="print"><button class="pbtn" onclick="window.print()">Save as PDF ↗</button></div>
+<div class="wrap"><div class="doc">
+  <div class="head">
+    <div>
+      <div class="eyebrow">KPI Scorecard · Result</div>
+      <h1>Eduardus Kent Sutanza</h1>
+      <div class="meta"><b>Senior</b> · 2026 Q3 · supervisor <b>Rashy &amp; Joshua</b></div>
+    </div>
+    <div class="official">
+      <div class="scorebox n-mid">
+        <div class="lbl">Official KPI</div>
+        <div class="big">3.4</div>
+        <div class="sub">Fair · supervisor rating</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="calib">
+      <div class="c spv">Official (supervisor) <b>3.4</b></div>
+      <div class="c self">Self-assessment <b>4.02</b></div>
+      <div class="c gap">Calibration gap <b>+0.62</b></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle">Category breakdown</div>
+    <div class="cat">
+      <div class="cathd"><div class="catname">1    Output Quality &amp; Craft</div>
+        <div class="catscores"><span class="mut">self</span> <span class="chip hi">4.2</span> <span class="mut">supervisor</span> <span class="chip mid">3.4</span></div></div>
+      <div class="bar"><div class="fill mid" style="width:68%"></div></div>
+      <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead><tbody><tr><td class="mn">Pacing &amp; rhythm</td>
+        <td class="sc"><span class="chip hi">5</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Improved vs last Q</td></tr><tr><td class="mn">Storytelling structure</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Watch on complex jobs</td></tr><tr><td class="mn">Cut precision</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Watch on complex jobs</td></tr><tr><td class="mn">Brand &amp; style adherence</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">First-cut approval rate</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Improved vs last Q</td></tr></tbody></table>
+    </div><div class="cat">
+      <div class="cathd"><div class="catname">2    Client &amp; Revision Management</div>
+        <div class="catscores"><span class="mut">self</span> <span class="chip mid">3.8</span> <span class="mut">supervisor</span> <span class="chip mid">3.0</span></div></div>
+      <div class="bar"><div class="fill mid" style="width:60%"></div></div>
+      <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead><tbody><tr><td class="mn">Average revision rounds</td>
+        <td class="sc"><span class="chip mid">3</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Revision cause breakdown</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Improved vs last Q</td></tr><tr><td class="mn">Brief adherence</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Client feedback interpretation</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr></tbody></table>
+    </div><div class="cat">
+      <div class="cathd"><div class="catname">3    Speed &amp; Turnaround</div>
+        <div class="catscores"><span class="mut">self</span> <span class="chip mid">3.8</span> <span class="mut">supervisor</span> <span class="chip mid">3.8</span></div></div>
+      <div class="bar"><div class="fill mid" style="width:76%"></div></div>
+      <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead><tbody><tr><td class="mn">On-time delivery rate</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Improved vs last Q</td></tr><tr><td class="mn">Turnaround vs. estimate</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Throughput</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Consistent this quarter</td></tr><tr><td class="mn">Proactive deadline flagging</td>
+        <td class="sc"><span class="chip mid">3</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Watch on complex jobs</td></tr></tbody></table>
+    </div><div class="cat">
+      <div class="cathd"><div class="catname">4    Technical Skills (Premiere Pro)</div>
+        <div class="catscores"><span class="mut">self</span> <span class="chip hi">4.0</span> <span class="mut">supervisor</span> <span class="chip mid">3.4</span></div></div>
+      <div class="bar"><div class="fill mid" style="width:68%"></div></div>
+      <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead><tbody><tr><td class="mn">Project &amp; file organisation</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Consistent this quarter</td></tr><tr><td class="mn">Export accuracy</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Audio finishing</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Colour consistency</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Self-sufficiency</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Watch on complex jobs</td></tr></tbody></table>
+    </div><div class="cat">
+      <div class="cathd"><div class="catname">5    Communication &amp; Process</div>
+        <div class="catscores"><span class="mut">self</span> <span class="chip mid">3.8</span> <span class="mut">supervisor</span> <span class="chip mid">3.6</span></div></div>
+      <div class="bar"><div class="fill mid" style="width:72%"></div></div>
+      <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead><tbody><tr><td class="mn">Responsiveness</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr><tr><td class="mn">Proactive status updates</td>
+        <td class="sc"><span class="chip mid">3</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Improved vs last Q</td></tr><tr><td class="mn">Question quality</td>
+        <td class="sc"><span class="chip hi">5</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Watch on complex jobs</td></tr><tr><td class="mn">Cross-client context switching</td>
+        <td class="sc"><span class="chip mid">3</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Consistent this quarter</td></tr><tr><td class="mn">Feedback reception</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt"></td></tr></tbody></table>
+    </div><div class="cat">
+      <div class="cathd"><div class="catname">6    Initiative &amp; Professional Growth</div>
+        <div class="catscores"><span class="mut">self</span> <span class="chip hi">4.5</span> <span class="mut">supervisor</span> <span class="chip mid">3.2</span></div></div>
+      <div class="bar"><div class="fill mid" style="width:64%"></div></div>
+      <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead><tbody><tr><td class="mn">Skill development</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Watch on complex jobs</td></tr><tr><td class="mn">Process contribution</td>
+        <td class="sc"><span class="chip hi">5</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt">Improved vs last Q</td></tr><tr><td class="mn">Mentorship of juniors</td>
+        <td class="sc"><span class="chip hi">5</span></td><td class="sc"><span class="chip hi">4</span></td>
+        <td class="nt">Consistent this quarter</td></tr><tr><td class="mn">Cultural contribution</td>
+        <td class="sc"><span class="chip hi">4</span></td><td class="sc"><span class="chip mid">3</span></td>
+        <td class="nt"></td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="stitle">Focus for next quarter</div>
+    <div class="frow">
+      <div class="farea">Average revision rounds<span class="pri high">High</span></div>
+      <div class="fgrid">
+        <div><span class="k">Why</span>Two projects needed a third pass this quarter</div>
+        <div><span class="k">Agreed action</span>Lock structure with a 60-sec blockout before full build</div>
+        <div><span class="k">How we measure</span>≤2 rounds on next 5 deliveries</div>
+      </div></div><div class="frow">
+      <div class="farea">Mentorship of juniors<span class="pri medium">Medium</span></div>
+      <div class="fgrid">
+        <div><span class="k">Why</span>Growing toward the supervisor track</div>
+        <div><span class="k">Agreed action</span>Own weekly review of one junior’s cut</div>
+        <div><span class="k">How we measure</span>Junior first-cut rate up by review</div>
+      </div></div>
+  </div>
+
+  <div class="section">
+    <div class="stitle">Written assessment</div>
+    <div class="written">
+      <div class="wcard e"><div class="who">Editor · self</div>
+        <div class="row"><div class="lab">What went well</div><div class="val">Rebuilt two messy shoots into clean stories with no senior re-cut.</div></div>
+        <div class="row"><div class="lab">Challenging</div><div class="val">Cross-account switching under peak load slowed a delivery.</div></div>
+        <div class="row"><div class="lab">To improve</div><div class="val">Tighten first-pass structure to cut revision rounds.</div></div>
+      </div>
+      <div class="wcard s"><div class="who">Supervisor</div>
+        <div class="row"><div class="lab">Strengths</div><div class="val">Reliable craft ceiling; trusted on the hardest edits.</div></div>
+        <div class="row"><div class="lab">Areas of improvement</div><div class="val">Revision discipline and earlier risk-flagging on parallel projects.</div></div>
+        <div class="row"><div class="lab">Trajectory & recommendation</div><div class="val">On a clear management-track path — mentoring signal is the one to build.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Official record · supervisor rating is the KPI of record; self-assessment is calibration only. Read-only recipient view generated from the submitted scorecard. Sample data shown.</div>
+</div></div>
+</body></html>

@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KPI Scorecard</title>
+<style>
+  :root{
+    /* ===== SHARED VISUAL CONTRACT — identical across all six People System files ===== */
+    --canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;
+    --kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+    --lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;
+    /* file-local aliases mapped onto the contract */
+    --faint:#9aa1ab;--line2:#eef0f2;--accent:var(--kpi);--accent-soft:#eef0fe;
+    --self:#5b6472;--selfbg:#f4f5f7;--spv:var(--kpi);--spvbg:#f2f2fe;
+    --low:var(--lo);--high:var(--hi);--r:10px;
+  }
+  *{box-sizing:border-box}html,body{margin:0}
+  body{font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;background:var(--canvas);color:var(--ink);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1;font-variant-numeric:tabular-nums}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .err{color:var(--lo);font-size:12.5px;font-weight:600;margin:-4px 2px 12px}
+  .ctx select.bad,.ctx .supbtn.bad{border-color:var(--lo)}
+  .wrap{max-width:860px;margin:0 auto;padding:20px 18px 120px}
+  .top .cap{color:var(--faint);font-size:12px;text-transform:uppercase;letter-spacing:.14em;font-weight:600}
+  .top h1{margin:0;font-size:22px;letter-spacing:-.02em;font-weight:700}
+  .ctx{display:grid;grid-template-columns:1.4fr .8fr 1.2fr .8fr;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin:14px 0 18px}
+  .ctx .f label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600;margin-bottom:5px}
+  .ctx select,.ctx input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;color:var(--ink);background:#fff}
+  .ctx select:focus,.ctx input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .ctx .auto{padding:9px 10px;background:var(--line2);border-radius:8px;font-weight:600}
+  .supbox{position:relative}
+  .supbtn{width:100%;text-align:left;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;cursor:pointer}
+  .supbtn.empty{color:var(--faint)}
+  .supmenu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.09);padding:6px;display:none}
+  .supmenu.open{display:block}
+  .supmenu label{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:14px}
+  .supmenu label:hover{background:var(--line2)}
+  .supmenu .add{display:flex;gap:6px;padding:6px 4px 2px;border-top:1px solid var(--line2);margin-top:4px}
+  .supmenu .add input{flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit}
+  .supmenu .add button{padding:6px 10px;border:0;background:var(--accent);color:#fff;border-radius:6px;font:inherit;font-weight:600;cursor:pointer}
+  .prog{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .prog .bar{flex:1;height:6px;background:var(--line2);border-radius:99px;overflow:hidden}
+  .prog .fill{height:100%;background:var(--accent);border-radius:99px;transition:width .35s cubic-bezier(.4,0,.2,1)}
+  .prog .lbl{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;animation:rise .28s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media(prefers-reduced-motion:reduce){.step,.prog .fill{animation:none;transition:none}}
+  .step .eyebrow{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+  .step h2{margin:3px 0 2px;font-size:20px;letter-spacing:-.01em}
+  .step .hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .scalekey{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px;font-size:12px;color:var(--muted)}
+  .scalekey b{color:var(--ink)}
+  /* metric block = one Excel row, expanded */
+  .m{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  .m .mn{font-weight:700;font-size:16px}
+  .m .tg{font-size:13.5px;color:#3b4250;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:8px;padding:10px 13px;margin:8px 0 14px;line-height:1.5}
+  .m .tg b{display:inline-block;color:var(--accent);text-transform:uppercase;font-size:10px;letter-spacing:.07em;font-weight:800;margin-bottom:3px}
+  .panels{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
+  .panel{border-radius:10px;padding:12px}
+  .panel.self{background:var(--selfbg)} .panel.spv{background:var(--spvbg)}
+  .panel .ph{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px}
+  .panel.self .ph{color:var(--self)} .panel.spv .ph{color:var(--spv)}
+  .fld{margin-bottom:10px}
+  .fld label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px}
+  .fld textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;min-height:38px;resize:vertical;background:#fff}
+  .fld textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .fld select{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;background:#fff}
+  .seg{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+  .seg button{padding:9px 0;border:1.5px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-weight:700;color:var(--faint);cursor:pointer;transition:.12s;font-variant-numeric:tabular-nums}
+  .seg button:hover{border-color:var(--accent);color:var(--accent)}
+  .seg button.on{color:#fff;border-color:transparent}
+  .seg button.on.b12{background:var(--low)} .seg button.on.b3{background:var(--mid);color:#3d2c00} .seg button.on.b45{background:var(--high)}
+  /* reflect */
+  .focusrow{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-bottom:10px}
+  .focusrow select,.focusrow input{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff}
+  .focushead{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-bottom:6px}
+  .focushead span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700}
+  .ghelp{font-size:12px;color:var(--faint);margin:0 0 5px;line-height:1.4}
+  .sumgrid{display:grid;grid-template-columns:120px 1fr 1fr;gap:8px 12px;align-items:start;margin-top:6px}
+  .sumgrid .h{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;padding-top:8px}
+  .sumgrid .h.self{color:var(--self)} .sumgrid .h.spv{color:var(--spv)}
+  .sumgrid .rlbl{font-size:13px;font-weight:650;padding-top:9px}
+  .sumgrid textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;min-height:64px;resize:vertical}
+  /* review */
+  .hero{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center;background:linear-gradient(135deg,var(--kpi),#3730a3);color:#fff;border-radius:12px;padding:22px 26px;margin-bottom:16px;transition:background .35s ease;box-shadow:0 10px 30px rgba(23,25,29,.12)}
+  .hero.b12{background:linear-gradient(135deg,#f0653d,#d5371c)}
+  .hero.b3{background:linear-gradient(135deg,#f7cf4d,#e3a008)}
+  .hero.b3,.hero.b3 .big,.hero.b3 .lab,.hero.b3 .side{color:#3d2c00}
+  .hero.b3 .big .of{color:rgba(0,0,0,.45)}
+  .hero.b45{background:linear-gradient(135deg,#24bd8c,#1c8a68)}
+  .hero .big{font-size:52px;font-weight:800;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.12)}.hero .big .of{font-size:20px;color:rgba(255,255,255,.7);font-weight:600;text-shadow:none}
+  .hero .lab{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.92);font-weight:700;margin-top:4px}
+  .hero .side{font-size:13px;color:rgba(255,255,255,.9)}
+  .catlist{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:14px}
+  .catlist .cr{display:grid;grid-template-columns:1fr 64px 64px;padding:10px 14px;border-top:1px solid var(--line2);font-size:14px;align-items:center}
+  .catlist .cr:first-child{border-top:0;background:var(--line2);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+  .catlist .cr .n{text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+  .catlist .cr .n.s{color:var(--self)} .catlist .cr .n.p{color:var(--spv)}
+  .nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:12px 18px}
+  .nav .inner{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:10px}
+  .nav .spacer{flex:1}
+  .btn{padding:11px 18px;border-radius:9px;font:inherit;font-weight:650;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .btn:hover{border-color:var(--muted)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)} .btn.primary:hover{background:#4338ca}
+  .btn.ghost{border:0;background:none;color:var(--muted);font-weight:600;font-size:13px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .live{font-size:13px;color:var(--muted);font-weight:600}.live b{color:var(--ink);font-variant-numeric:tabular-nums}
+  #preview{display:none}
+  .pvbar{display:flex;gap:10px;margin-bottom:14px}
+  .rpt-m{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  .rpt-m .mn{font-weight:700}.rpt-m .tg{font-size:12px;color:var(--faint);margin:2px 0 8px}
+  .rpt-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px}
+  .chip{display:inline-block;min-width:26px;text-align:center;color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-variant-numeric:tabular-nums}
+  .chip.b12{background:var(--low)}.chip.b3{background:var(--mid);color:#3d2c00}.chip.b45{background:var(--high)}.chip.na{background:var(--faint)}
+  @media print{.noprint{display:none!important}body{background:#fff}.wrap{padding:0;max-width:none}}
+  @media(max-width:680px){.ctx{grid-template-columns:1fr 1fr}.panels,.focusrow,.focushead,.rpt-cols{grid-template-columns:1fr}.sumgrid{grid-template-columns:1fr}.sumgrid .h{display:none}}
+  @media(max-width:420px){.wrap{padding:16px 13px 120px}.ctx{grid-template-columns:1fr}.step{padding:16px}.hero{grid-template-columns:1fr;gap:12px}.hero .big{font-size:42px}.catlist .cr{grid-template-columns:1fr 46px 46px}.nav{padding:10px 13px}.btn{padding:10px 13px}}
+.reflink{display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:12px;font-weight:600;color:#475569;text-decoration:none;border:1px solid #e6e8eb;background:#fff;padding:5px 11px;border-radius:8px}.reflink:hover{border-color:#94a3b8;color:#17191d}
+
+  /* ===== Tweaks panel (appearance only — excluded from print/payload) ===== */
+  .tweaks{position:fixed;top:14px;right:14px;z-index:60;font-size:13px}
+  .tw-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border:1px solid var(--line);background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-radius:9px;font:inherit;font-weight:650;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+  .tw-toggle:hover{border-color:var(--muted)}
+  .tw-toggle .dot{width:9px;height:9px;border-radius:50%;background:var(--kpi)}
+  .tw-panel{position:absolute;top:calc(100% + 8px);right:0;width:264px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 46px rgba(0,0,0,.16);padding:15px;animation:rise .2s ease}
+  .tw-hd{display:flex;justify-content:space-between;align-items:center;font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--muted);margin-bottom:13px}
+  .tw-hd button{border:0;background:none;font:inherit;font-size:11px;font-weight:600;color:var(--kpi);cursor:pointer;text-transform:none;letter-spacing:0}
+  .tw-row{margin-bottom:14px}.tw-row:last-child{margin-bottom:0}
+  .tw-lab{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px}
+  .tw-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .tw-seg button{padding:8px 0;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:.12s}
+  .tw-seg button:hover{border-color:var(--muted)}
+  .tw-seg button.on{border-color:var(--kpi);color:var(--kpi);background:var(--accent-soft)}
+  .tw-swatches{display:flex;gap:9px}
+  .tw-sw{width:26px;height:26px;border-radius:50%;border:0;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+  .tw-sw.on{box-shadow:0 0 0 2px #fff,0 0 0 4px currentColor}
+  /* Density */
+  body.dens-compact{font-size:14px}
+  body.dens-compact .wrap{max-width:800px}body.dens-compact .step{padding:16px}body.dens-compact .m{padding:12px;margin-bottom:10px}body.dens-compact .panel{padding:10px}body.dens-compact .ctx{padding:10px}
+  body.dens-roomy{font-size:16px}
+  body.dens-roomy .wrap{max-width:940px}body.dens-roomy .step{padding:30px}body.dens-roomy .m{padding:22px;margin-bottom:18px}body.dens-roomy .panel{padding:16px}body.dens-roomy .step h2{font-size:22px}
+  /* Character */
+  body.char-sharp .step,body.char-sharp .m,body.char-sharp .panel,body.char-sharp .btn,body.char-sharp .seg button,body.char-sharp .ctx,body.char-sharp .hero,body.char-sharp .catlist,body.char-sharp .fld textarea,body.char-sharp .fld select{border-radius:3px}
+  body.char-sharp .step{box-shadow:none}
+  body.char-bold .step{border-width:2px;box-shadow:0 8px 26px rgba(23,25,29,.09)}
+  body.char-bold .m{border-width:1.5px}
+  body.char-bold .step .eyebrow{font-size:13px;letter-spacing:.09em}
+  body.char-bold .panel .ph{letter-spacing:.09em}
+  body.char-bold .seg button{border-width:2px}
+  body.char-bold .btn.primary{box-shadow:0 4px 16px color-mix(in srgb,var(--kpi) 42%,transparent)}
+  @media print{.tweaks{display:none!important}}
+  @media(max-width:520px){.tweaks{top:auto;bottom:74px;right:12px}.tw-panel{bottom:calc(100% + 8px);top:auto}}
+</style>
+</head>
+<body>
+<div class="tweaks noprint" id="tweaks">
+  <button class="tw-toggle" id="twToggle" aria-expanded="false" aria-controls="twPanel"><span class="dot"></span>Tweaks</button>
+  <div class="tw-panel" id="twPanel" role="dialog" aria-label="Appearance tweaks" hidden>
+    <div class="tw-hd"><span>Appearance</span><button type="button" id="twReset">Reset</button></div>
+    <div class="tw-row"><span class="tw-lab">Density</span>
+      <div class="tw-seg" data-group="density">
+        <button type="button" data-v="compact">Compact</button>
+        <button type="button" data-v="cozy">Cozy</button>
+        <button type="button" data-v="roomy">Roomy</button>
+      </div></div>
+    <div class="tw-row"><span class="tw-lab">Accent</span>
+      <div class="tw-swatches" id="twAccent"></div></div>
+    <div class="tw-row"><span class="tw-lab">Character</span>
+      <div class="tw-seg" data-group="character">
+        <button type="button" data-v="calm">Calm</button>
+        <button type="button" data-v="sharp">Sharp</button>
+        <button type="button" data-v="bold">Bold</button>
+      </div></div>
+  </div>
+</div>
+<div class="wrap">
+
+<div id="form">
+  <div class="top"><h1>KPI Scorecard</h1><a class="reflink" href="people_system_reference.html#kpi" target="_blank" rel="noopener">View full KPI Rubric ↗</a></div>
+  <div class="ctx">
+    <div class="f"><label>Editor</label><select id="employee"><option value="">Select…</option></select></div>
+    <div class="f"><label>Level</label><div class="auto" id="levelAuto">—</div></div>
+    <div class="f"><label>Supervisor</label>
+      <div class="supbox"><button class="supbtn empty" id="supBtn" type="button">Select…</button>
+        <div class="supmenu" id="supMenu">
+          <label><input type="checkbox" value="Rashy"> Rashy</label>
+          <label><input type="checkbox" value="Joshua"> Joshua</label>
+          <div class="add"><input id="supAdd" placeholder="Add another"><button type="button" id="supAddBtn">Add</button></div>
+        </div></div></div>
+    <div class="f"><label>Quarter</label><input id="quarter" placeholder="Q3 2026" maxlength="9"></div>
+  </div>
+  <div id="ctxErr" class="err" hidden>Select an editor to begin — the level bar and targets load from their level.</div>
+  <div class="prog"><div class="bar" role="progressbar" aria-label="Scorecard progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><div class="fill" id="fill" style="width:0%"></div></div><div class="lbl" id="progLbl">—</div></div>
+  <div id="stepHost"></div>
+</div>
+
+<div id="preview">
+  <div class="pvbar noprint">
+    <button class="btn" id="pvBack">← Back</button>
+    <button class="btn" id="pvPrint">Save as PDF</button>
+    <button class="btn primary" id="pvSubmit">File to ClickUp</button>
+  </div>
+  <div id="pvBody"></div>
+</div>
+</div>
+
+<div class="nav noprint" id="navbar"><div class="inner">
+  <button class="btn" id="btnBack" style="visibility:hidden">← Back</button>
+  <div class="spacer"></div><span class="live" id="liveScore"></span>
+  <button class="btn primary" id="btnNext">Next →</button>
+</div></div>
+
+<script>
+/* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+let ROSTER=[], LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], KPI=[];
+const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
+function bulletsToLine(x){return Array.isArray(x)?x.join(' '):(x||'');}
+async function loadConfig(){
+  const res=await fetch(`${WORKER_URL}/config`);
+  if(!res.ok) throw new Error('config fetch failed: '+res.status);
+  const cfg=await res.json();
+  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
+  const catOrder=[], catMap={};
+  cfg.kpi_rubric.forEach(row=>{
+    if(!catMap[row.category]){catMap[row.category]={cat:row.category,metrics:[]};catOrder.push(row.category);}
+    const lv=row.levels;
+    catMap[row.category].metrics.push([row.metric,[
+      bulletsToLine(lv.intern), bulletsToLine(lv.jr), bulletsToLine(lv.assoc),
+      bulletsToLine(lv.senior), bulletsToLine(lv.supervisor), bulletsToLine(lv.principal)
+    ]]);
+  });
+  KPI=catOrder.map(c=>catMap[c]);
+}
+
+const EDITOR_ROWS=["What went well this quarter","What was challenging","What do you want to improve next quarter"];
+const SPV_ROWS=["Strengths","Areas of improvement","Trajectory & recommendation"];
+const EGUIDE={"What went well this quarter":"Name projects or moments, not adjectives.","What was challenging":"Be honest — what slowed you or was hard.","What do you want to improve next quarter":"Should tie back to your focus areas above."};
+const SGUIDE={"Strengths":"Where this editor is strongest, with evidence.","Areas of improvement":"Concrete gaps, framed as growth.","Trajectory & recommendation":"Direction, pace, and your call — promote-track, steady, or needs support."};
+
+const S={self:{},selfNote:{},actual:{},spv:{},spvNote:{},supers:[],focus:[{area:"",why:"",action:"",measure:"",priority:""},{area:"",why:"",action:"",measure:"",priority:""}],sum:{}};
+let curLevel="",stepIdx=0;
+let TOTAL=KPI.length+2;
+
+const empSel=document.getElementById('employee');
+empSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===empSel.value);curLevel=r?r[1]:"";document.getElementById('levelAuto').textContent=curLevel?LEVEL_LABEL[curLevel]:"—";render();});
+
+const supBtn=document.getElementById('supBtn'),supMenu=document.getElementById('supMenu');
+supBtn.addEventListener('click',()=>supMenu.classList.toggle('open'));
+document.addEventListener('click',e=>{if(!e.target.closest('.supbox'))supMenu.classList.remove('open');});
+supMenu.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',syncSupers));
+document.getElementById('supAddBtn').addEventListener('click',()=>{const v=document.getElementById('supAdd').value.trim();if(!v)return;const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${v}" checked> ${v}`;l.querySelector('input').addEventListener('change',syncSupers);supMenu.querySelector('.add').before(l);document.getElementById('supAdd').value='';syncSupers();});
+function syncSupers(){S.supers=[...supMenu.querySelectorAll('input:checked')].map(c=>c.value);supBtn.textContent=S.supers.length?S.supers.join(' & '):'Select…';supBtn.classList.toggle('empty',!S.supers.length);}
+const qEl=document.getElementById('quarter');
+qEl.addEventListener('input',()=>{const p=qEl.selectionStart;qEl.value=qEl.value.toUpperCase();qEl.setSelectionRange(p,p);});
+
+function levelIdx(){return LK.indexOf(curLevel);}
+function catAvg(ci,who){const v=KPI[ci].metrics.map((_,mi)=>S[who][`${ci}-${mi}`]).filter(x=>x);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
+function overall(who){const c=KPI.map((_,ci)=>catAvg(ci,who)).filter(x=>x!=null);return c.length?c.reduce((a,b)=>a+b,0)/c.length:null;}
+const fmt=v=>v==null?"—":v.toFixed(2);
+
+const host=document.getElementById('stepHost');
+function render(){
+  const pct=Math.round(stepIdx/(TOTAL-1)*100);
+  document.getElementById('fill').style.width=pct+'%';
+  document.getElementById('progBar').setAttribute('aria-valuenow',pct);
+  if(stepIdx<KPI.length){renderCat(stepIdx);document.getElementById('progLbl').textContent=`${stepIdx+1} / ${TOTAL} · ${KPI[stepIdx].cat}`;}
+  else if(stepIdx===KPI.length){renderReflect();document.getElementById('progLbl').textContent=`${stepIdx+1} / ${TOTAL} · Reflection & focus`;}
+  else{renderReview();document.getElementById('progLbl').textContent=`${TOTAL} / ${TOTAL} · Review & file`;}
+  document.getElementById('btnBack').style.visibility=stepIdx===0?'hidden':'visible';
+  document.getElementById('btnNext').textContent=stepIdx<TOTAL-1?'Next →':'Preview report →';
+  const po=overall('spv'),so=overall('self');
+  document.getElementById('liveScore').innerHTML=po!=null?`Official <b>${fmt(po)}</b>${so!=null?` · self <b>${fmt(so)}</b>`:''}`:'';
+}
+function seg(key,who){let b='';for(let v=1;v<=5;v++){const sel=S[who][key]===v;const on=sel?`on ${BAND(v)}`:'';b+=`<button class="${on}" data-k="${key}" data-w="${who}" data-v="${v}" aria-pressed="${sel}" aria-label="Rate ${v} of 5">${v}</button>`;}return `<div class="seg" role="group" aria-label="1 to 5 rating">${b}</div>`;}
+function renderCat(ci){
+  const c=KPI[ci],li=levelIdx();
+  let h=`<div class="step"><div class="eyebrow">Category ${ci+1} of ${KPI.length}</div><h2>${c.cat}</h2>
+   <div class="scalekey"><span><b>1</b> Unsatisfactory</span><span><b>2</b> Needs work</span><span><b>3</b> Fair</span><span><b>4</b> Good</span><span><b>5</b> Excellent</span></div>`;
+  c.metrics.forEach((m,mi)=>{const key=`${ci}-${mi}`;const tgt=li>=0?m[1][li]:"Select an editor to load the level bar";
+    h+=`<div class="m"><div class="mn">${m[0]}</div>
+      <div class="tg"><b>Target · ${li>=0?LEVEL_LABEL[curLevel]:'—'}</b><br>${tgt}</div>
+      <div class="panels">
+        <div class="panel self"><div class="ph">Editor (self)</div>
+          <div class="fld"><label>Your actual — what you did this quarter</label><textarea data-a="${key}" placeholder="Concrete: projects, numbers, deliverables">${S.actual[key]||''}</textarea></div>
+          <div class="fld"><label>Your rating</label>${seg(key,'self')}</div>
+          <div class="fld"><label>Your notes</label><textarea data-sn="${key}" placeholder="Context for your score">${S.selfNote[key]||''}</textarea></div>
+        </div>
+        <div class="panel spv"><div class="ph">Supervisor</div>
+          <div class="fld"><label>Supervisor rating</label>${seg(key,'spv')}</div>
+          <div class="fld"><label>Supervisor notes</label><textarea data-pn="${key}" placeholder="Evidence / calibration">${S.spvNote[key]||''}</textarea></div>
+        </div>
+      </div></div>`;});
+  h+=`</div>`;host.innerHTML=h;wire();
+}
+const GUIDE={
+  "Strengths":{self:"Where were you strongest this quarter? Name projects or moments, not adjectives.",spv:"Where is this editor strongest, and how does it help the team?"},
+  "Growth areas":{self:"One or two areas to grow, tied to something you can point to.",spv:"One or two areas to grow, framed as growth with a concrete example."},
+  "Overall assessment":{self:"Net summary — your trajectory and readiness this quarter.",spv:"Net summary — trajectory, readiness, the headline call."}
+};
+function renderReflect(){
+  const PRIO=["High","Medium","Low"];
+  const opts=KPI.map(c=>`<optgroup label="${c.cat}">`+c.metrics.map(m=>`<option>${m[0]}</option>`).join('')+`</optgroup>`).join('');
+  let fr='';
+  S.focus.forEach((f,i)=>fr+=`<div class="m">
+    <div class="mn" style="font-size:14px">Focus ${i+1}</div>
+    <div class="panels">
+      <div class="panel self"><div class="ph">Editor — you spot it first</div>
+        <div class="fld"><label>What you want to grow</label><select data-fa="${i}"><option value="">Select area to grow…</option>${opts}</select></div>
+        <div class="fld"><label>Why / context</label><textarea data-fw="${i}" placeholder="Why this matters to you">${f.why||''}</textarea></div>
+      </div>
+      <div class="panel spv"><div class="ph">Supervisor — we help</div>
+        <div class="fld"><label>Agreed action</label><textarea data-fact="${i}" placeholder="What we'll do to support it">${f.action||''}</textarea></div>
+        <div class="fld"><label>How to measure</label><textarea data-fm="${i}" placeholder="Concrete signal of progress">${f.measure||''}</textarea></div>
+        <div class="fld"><label>Priority</label><select data-fp="${i}"><option value="">—</option>${PRIO.map(p=>`<option ${f.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      </div>
+    </div></div>`);
+  fr+=`<button class="btn ghost" id="addFocus" style="padding-left:0">+ Add focus area</button>`;
+  const block=(rows,guide,side,title)=>`<h3 style="margin:16px 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:${side==='e'?'var(--self)':'var(--spv)'}">${title}</h3>`+rows.map((r,i)=>`<div class="fld"><label>${r}</label><div class="ghelp">${guide[r]}</div><textarea data-sum="${side}${i}">${S.sum[`${side}${i}`]||''}</textarea></div>`).join('');
+  host.innerHTML=`<div class="step"><div class="eyebrow">Reflection</div><h2>Focus for next quarter</h2>
+    <p class="hint">Name your own growth area first. Coming in blank is itself a flag — it factors into the evaluation, and it's where we step in to help.</p>${fr}
+    <h2 style="margin-top:24px;font-size:18px">Written assessment</h2>
+    ${block(EDITOR_ROWS,EGUIDE,'e','Editor side')}${block(SPV_ROWS,SGUIDE,'s','Supervisor side')}</div>`;
+  wire();host.querySelectorAll('[data-fa]').forEach(s=>s.value=S.focus[+s.dataset.fa].area||'');
+}
+function renderReview(){
+  const po=overall('spv'),so=overall('self');let side=(so!=null&&po!=null)?`Self ${fmt(so)} · gap ${(so-po>=0?'+':'')}${fmt(so-po)}`:'Self incomplete';
+  let rows=`<div class="cr"><div>Category</div><div class="n">Self</div><div class="n">SPV</div></div>`;
+  KPI.forEach((c,ci)=>rows+=`<div class="cr"><div>${c.cat}</div><div class="n s">${fmt(catAvg(ci,'self'))}</div><div class="n p">${fmt(catAvg(ci,'spv'))}</div></div>`);
+  host.innerHTML=`<div class="step"><div class="eyebrow">Review</div><h2>${empSel.value||'—'} · ${qEl.value||'—'}</h2>
+    <div class="hero ${po!=null?BAND(po):''}"><div><div class="big">${fmt(po)}<span class="of"> / 5</span></div><div class="lab">Official KPI · supervisor overall</div></div><div class="side">${side}</div></div>
+    <div class="catlist">${rows}</div></div>`;wire();
+}
+function wire(){
+  host.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{const{k,w,v}=b.dataset;const val=+v;S[w][k]=S[w][k]===val?undefined:val;render();}));
+  host.querySelectorAll('[data-a]').forEach(t=>t.addEventListener('input',()=>S.actual[t.dataset.a]=t.value));
+  host.querySelectorAll('[data-sn]').forEach(t=>t.addEventListener('input',()=>S.selfNote[t.dataset.sn]=t.value));
+  host.querySelectorAll('[data-pn]').forEach(t=>t.addEventListener('input',()=>S.spvNote[t.dataset.pn]=t.value));
+  host.querySelectorAll('[data-fa]').forEach(s=>s.addEventListener('change',()=>S.focus[+s.dataset.fa].area=s.value));
+  host.querySelectorAll('[data-fw]').forEach(i=>i.addEventListener('input',()=>S.focus[+i.dataset.fw].why=i.value));
+  host.querySelectorAll('[data-fact]').forEach(i=>i.addEventListener('input',()=>S.focus[+i.dataset.fact].action=i.value));
+  host.querySelectorAll('[data-fm]').forEach(i=>i.addEventListener('input',()=>S.focus[+i.dataset.fm].measure=i.value));
+  host.querySelectorAll('[data-fp]').forEach(s=>s.addEventListener('change',()=>S.focus[+s.dataset.fp].priority=s.value));
+  const af=host.querySelector('#addFocus');if(af)af.addEventListener('click',()=>{S.focus.push({area:"",why:"",action:"",measure:"",priority:""});render();});
+  host.querySelectorAll('[data-sum]').forEach(t=>t.addEventListener('input',()=>S.sum[t.dataset.sum]=t.value));
+}
+document.getElementById('btnBack').addEventListener('click',()=>{if(stepIdx>0){stepIdx--;render();scrollTo(0,0);}});
+document.getElementById('btnNext').addEventListener('click',()=>{if(stepIdx<TOTAL-1){if(stepIdx===0&&!empSel.value){const err=document.getElementById('ctxErr');err.hidden=false;empSel.classList.add('bad');empSel.focus();return;}stepIdx++;render();scrollTo(0,0);}else openPreview();});
+empSel.addEventListener('change',()=>{document.getElementById('ctxErr').hidden=true;empSel.classList.remove('bad');});
+
+function buildPayload(){
+  const li=levelIdx();
+  return{editor:empSel.value,level:curLevel,supervisor:S.supers.join(' & '),supervisors:S.supers,quarter:qEl.value,submitted_at:new Date().toISOString(),
+    official_kpi:overall('spv'),self_overall:overall('self'),
+    categories:KPI.map((c,ci)=>({name:c.cat,spv:catAvg(ci,'spv'),self:catAvg(ci,'self'),
+      metrics:c.metrics.map((m,mi)=>{const k=`${ci}-${mi}`;return{metric:m[0],target:li>=0?m[1][li]:null,actual:S.actual[k]||null,self:S.self[k]??null,self_note:S.selfNote[k]||null,spv:S.spv[k]??null,spv_note:S.spvNote[k]||null};})})),
+    focus:S.focus.filter(f=>f.area||f.why||f.action||f.measure).map(f=>({area:f.area,why:f.why,action:f.action,measure:f.measure,priority:f.priority})),
+    summary_editor:EDITOR_ROWS.map((r,i)=>({row:r,text:S.sum[`e${i}`]||''})),
+    summary_supervisor:SPV_ROWS.map((r,i)=>({row:r,text:S.sum[`s${i}`]||''})),
+    summary_self:EDITOR_ROWS.map((r,i)=>S.sum[`e${i}`]?`${r}: ${S.sum[`e${i}`]}`:'').filter(Boolean).join('\n'),
+    summary_spv:SPV_ROWS.map((r,i)=>S.sum[`s${i}`]?`${r}: ${S.sum[`s${i}`]}`:'').filter(Boolean).join('\n')};
+}
+
+const preview=document.getElementById('preview'),formEl=document.getElementById('form');
+function openPreview(){document.getElementById('pvBody').innerHTML=reportHTML(buildPayload());formEl.style.display='none';document.getElementById('navbar').style.display='none';preview.style.display='block';scrollTo(0,0);}
+document.getElementById('pvBack').addEventListener('click',()=>{preview.style.display='none';formEl.style.display='block';document.getElementById('navbar').style.display='block';});
+document.getElementById('pvPrint').addEventListener('click',()=>print());
+document.getElementById('pvSubmit').addEventListener('click',submitToWorker);
+const chip=v=>v==null?`<span class="chip na">—</span>`:`<span class="chip ${BAND(v)}">${v}</span>`;
+function reportHTML(d){
+  const po=d.official_kpi,so=d.self_overall;
+  let body='';
+  d.categories.forEach(c=>{body+=`<div class="catlist"><div class="cr"><div>${c.name}</div><div class="n s">${fmt(c.self)}</div><div class="n p">${fmt(c.spv)}</div></div></div>`;
+    c.metrics.forEach(m=>{body+=`<div class="rpt-m"><div class="mn">${m.metric}</div><div class="tg">Target: ${m.target||'—'}</div>
+      <div class="rpt-cols">
+        <div><b>Self</b> ${chip(m.self)}<div style="margin-top:4px">${m.actual?`<i>Actual:</i> ${m.actual}<br>`:''}${m.self_note?`<i>Notes:</i> ${m.self_note}`:''}</div></div>
+        <div><b>Supervisor</b> ${chip(m.spv)}<div style="margin-top:4px">${m.spv_note?`<i>Notes:</i> ${m.spv_note}`:''}</div></div>
+      </div></div>`;});});
+  const focus=d.focus.length?`<h2 style="font-size:16px;margin-top:16px">Focus · next quarter</h2>`+d.focus.map(f=>`<div class="rpt-m"><div class="mn" style="font-size:14px">${f.area||'—'}${f.priority?` <span class="chip ${f.priority==='High'?'b12':f.priority==='Medium'?'b3':'b45'}" style="font-size:11px">${f.priority}</span>`:''}</div><div class="rpt-cols" style="margin-top:6px"><div><i>Why:</i> ${f.why||'—'}</div><div><i>Agreed action:</i> ${f.action||'—'}<br><i>Measure:</i> ${f.measure||'—'}</div></div></div>`).join(''):'';
+  const sumBlock=(arr,title,color)=>`<h3 style="font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:${color}">${title}</h3>`+arr.map(s=>`<div class="rpt-m"><div class="mn" style="font-size:13px">${s.row}</div><div style="font-size:13px;white-space:pre-wrap">${s.text||'—'}</div></div>`).join('');
+  let sum=`<h2 style="font-size:16px;margin-top:16px">Written assessment</h2>`+sumBlock(d.summary_editor,'Editor side','var(--self)')+sumBlock(d.summary_supervisor,'Supervisor side','var(--spv)');
+  const side=(so!=null&&po!=null)?`Self ${fmt(so)} · gap ${(so-po>=0?'+':'')}${fmt(so-po)}`:'Self incomplete';
+  return`<div class="step" style="animation:none"><div class="eyebrow">Filed report</div><h2>${d.editor||'—'} · ${d.quarter||'—'}</h2>
+    <div class="hint">Level ${LEVEL_LABEL[d.level]||'—'} · Supervisor ${d.supervisor||'—'}</div>
+    <div class="hero ${po!=null?BAND(po):''}"><div><div class="big">${fmt(po)}<span class="of"> / 5</span></div><div class="lab">Official KPI · supervisor overall</div></div><div class="side">${side}</div></div>
+    ${body}${focus}${sum}
+    <p class="hint" style="margin-top:14px">Supervisor overall is the recorded KPI; the self-rating is calibration only.</p>
+    <button class="btn ghost" id="jsonLink">Export JSON</button></div>`;
+}
+async function submitToWorker(){
+  const b=document.getElementById('pvSubmit');b.disabled=true;b.textContent='Filing…';
+  try{const r=await fetch(`${WORKER_URL}/submit/kpi`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(buildPayload())});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);b.textContent='Filed ✓';alert(`Stored + PDF attached to ClickUp.\nClickUp task: ${j.clickup_task_id||'(none)'}`);}
+  catch(e){b.textContent='File to ClickUp';b.disabled=false;alert('Failed: '+e.message);}
+}
+document.addEventListener('click',e=>{if(e.target.id==='jsonLink'){const blob=new Blob([JSON.stringify(buildPayload(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`kpi_${(empSel.value||'draft').replace(/\s+/g,'_')}.json`;a.click();}});
+loadConfig().then(()=>{TOTAL=KPI.length+2;ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;empSel.appendChild(o);});render();}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
+</script>
+<script>
+/* ===== Tweaks panel wiring — appearance only, in-memory, no storage ===== */
+(function(){
+  const ACCENTS=[['indigo','#4f46e5','#eef0fe'],['teal','#0d9488','#e6f6f3'],['amber','#b45309','#fbf1e6'],['graphite','#3f4653','#eef0f3'],['rose','#be185d','#fce7f0']];
+  const DEF={density:'cozy',accent:'indigo',character:'calm'};
+  const T=Object.assign({},DEF);
+  const body=document.body;
+  const accHost=document.getElementById('twAccent');
+  ACCENTS.forEach(([id,hex])=>{const b=document.createElement('button');b.className='tw-sw';b.type='button';b.dataset.v=id;b.style.background=hex;b.style.color=hex;b.setAttribute('aria-label',id+' accent');accHost.appendChild(b);});
+  function apply(){
+    body.classList.remove('dens-compact','dens-cozy','dens-roomy');body.classList.add('dens-'+T.density);
+    body.classList.remove('char-calm','char-sharp','char-bold');body.classList.add('char-'+T.character);
+    const a=ACCENTS.find(x=>x[0]===T.accent)||ACCENTS[0];
+    document.documentElement.style.setProperty('--kpi',a[1]);
+    document.documentElement.style.setProperty('--accent-soft',a[2]);
+    document.querySelectorAll('.tw-seg[data-group=density] button').forEach(b=>b.classList.toggle('on',b.dataset.v===T.density));
+    document.querySelectorAll('.tw-seg[data-group=character] button').forEach(b=>b.classList.toggle('on',b.dataset.v===T.character));
+    accHost.querySelectorAll('.tw-sw').forEach(b=>b.classList.toggle('on',b.dataset.v===T.accent));
+  }
+  document.querySelectorAll('.tw-seg').forEach(g=>g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;T[g.dataset.group]=b.dataset.v;apply();}));
+  accHost.addEventListener('click',e=>{const b=e.target.closest('.tw-sw');if(!b)return;T.accent=b.dataset.v;apply();});
+  const panel=document.getElementById('twPanel'),toggle=document.getElementById('twToggle');
+  toggle.addEventListener('click',()=>{const open=panel.hasAttribute('hidden');if(open){panel.removeAttribute('hidden');}else{panel.setAttribute('hidden','');}toggle.setAttribute('aria-expanded',open);});
+  document.addEventListener('click',e=>{if(!e.target.closest('#tweaks')&&!panel.hasAttribute('hidden')){panel.setAttribute('hidden','');toggle.setAttribute('aria-expanded','false');}});
+  document.getElementById('twReset').addEventListener('click',()=>{Object.assign(T,DEF);apply();});
+  apply();
+})();
+</script>
+</body>
+</html>

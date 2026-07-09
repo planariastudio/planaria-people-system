@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Peer Performance Appraisal · Value-Based</title>
+<style>
+  :root{
+    /* ===== SHARED VISUAL CONTRACT — identical across all six People System files ===== */
+    --canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;
+    --kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+    --lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;
+    /* file-local aliases mapped onto the contract */
+    --accent:var(--peer);--accent-soft:#f0fdfa;--accent-line:#99f6e4;
+  }
+  *{box-sizing:border-box}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  body{margin:0;background:var(--canvas);color:var(--ink);
+    font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-feature-settings:"tnum" 1;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;line-height:1.5;}
+  .wrap{max-width:780px;margin:0 auto;padding:22px 18px 120px}
+  h1{font-size:21px;margin:0;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .prog{margin:16px 0 4px}
+  .ptrack{height:6px;background:var(--line);border-radius:99px;overflow:hidden}
+  .pfill{height:100%;background:var(--accent);width:0;transition:width .25s ease}
+  .pmeta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .anon{display:flex;gap:10px;align-items:flex-start;background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:10px;padding:11px 13px;margin:14px 0;font-size:12.5px;color:#0f766e;line-height:1.45}
+  .anon b{color:#115e59}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin:14px 0}
+  .step{display:none}.step.on{display:block}
+  .stitle{font-size:16px;font-weight:650;margin:0 0 2px}
+  .sdesc{font-size:12.5px;color:var(--muted);margin:0 0 16px}
+  label.f{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  select,input[type=text],textarea{font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);width:100%;}
+  textarea{min-height:82px;resize:vertical}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .lvlpill{display:inline-block;margin-top:8px;font-size:11px;font-weight:650;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:99px;padding:3px 10px;text-transform:uppercase;letter-spacing:.04em}
+  .val{border:1px solid var(--line);border-radius:12px;padding:15px;margin:12px 0;background:#fff}
+  .vname{font-size:14px;font-weight:650}
+  .anchors{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 12px}
+  .anc{border:1px solid var(--line);border-radius:9px;padding:10px 12px;background:#fafafa}
+  .anc.now{background:var(--accent-soft);border-color:var(--accent-line)}
+  .anc .k{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .anc.now .k{color:var(--accent)}
+  .anc ul{margin:6px 0 0;padding:0;list-style:none}
+  .anc li{font-size:11.5px;color:#374151;line-height:1.5;padding-left:12px;position:relative}
+  .anc li:before{content:"•";position:absolute;left:0;color:var(--muted)}
+  .anc .top{font-size:11.5px;color:var(--muted);font-style:italic;margin-top:6px}
+  .scale{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:4px}
+  .sc{font:inherit;font-size:14px;font-weight:650;padding:10px 4px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);cursor:pointer;text-align:center;transition:.12s}
+  .sc small{display:block;font-size:9px;font-weight:600;color:#b9bdc4;margin-top:2px;letter-spacing:.01em}
+  .sc:hover{border-color:var(--muted)}
+  .sc.sel{color:#fff;border-color:transparent}
+  .sc.sel small{color:inherit;opacity:.78}
+  .guide{font-size:11.5px;color:var(--muted);margin:5px 0 0;line-height:1.45}
+  .revrow{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line)}
+  .revrow.clus{font-weight:650;color:var(--accent);border-bottom:1px dashed var(--line);margin-top:8px}
+  .overall{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:12px;border-top:2px solid var(--ink)}
+  .overall .big{font-size:28px;font-weight:700}
+  .confirm{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:#374151;margin:14px 0;line-height:1.45}
+  .confirm input{margin-top:3px}
+  .nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:12px 18px}
+  .navin{max-width:780px;margin:0 auto;display:flex;gap:10px;align-items:center}
+  button.btn{font:inherit;font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  button.btn.primary{background:var(--accent);border-color:transparent;color:#fff}
+  button.btn.primary:disabled{background:#cbd5d3;cursor:not-allowed}
+  button.btn.ghost{border:0;background:transparent;color:var(--muted);text-decoration:underline;font-weight:500;font-size:12px}
+  .navin .grow{flex:1}
+  .law{font-size:11.5px;color:var(--muted);border-left:3px solid var(--accent);padding:5px 0 5px 10px;margin:16px 2px 0;line-height:1.5}
+  .law b{color:#374151}
+  .hidden{display:none!important}
+.reflink{display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:12px;font-weight:600;color:#475569;text-decoration:none;border:1px solid #e6e8eb;background:#fff;padding:5px 11px;border-radius:8px}.reflink:hover{border-color:#94a3b8;color:#17191d}.nexthost{display:flex;flex-direction:column;gap:8px}.anc.next{background:#eef0fd;border-color:#c7cbf5}.anc.next .k{color:var(--kpi)}.anc.next.ic{border-left:3px solid #0d9488;background:#e9f6f4;border-color:#9fe0d6}.anc.next.ic .k{color:var(--peer)}.anc.next.mg{border-left:3px solid #4f46e5;background:#eef0fd;border-color:#c7cbf5}.anc.next .trk{font-size:10px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:5px;margin-left:6px}.anc.next.ic .trk{color:#0d9488;background:#e9f6f4}.anc.next.mg .trk{color:#4f46e5;background:#eef0fd}.trackreco{border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;background:#fafafa}.trkopts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.trk-opt{font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer}.trk-opt.sel{border-color:#4f46e5;color:#4f46e5;background:#eef0fd}
+@media(max-width:560px){.wrap{padding:18px 14px 120px}.row2{grid-template-columns:1fr}.anchors{grid-template-columns:1fr}.card{padding:16px}.nav{padding:10px 14px}button.btn{padding:11px 14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Peer Performance Appraisal · Value-Based</h1><a class="reflink" href="people_system_reference.html#peer" target="_blank" rel="noopener">View full Peer Rubric ↗</a>
+  <div class="sub">1 Unsatisfactory · 2 Needs Work · 3 Fair · 4 Good · 5 Excellent</div>
+  <div class="prog"><div class="ptrack" role="progressbar" aria-label="Appraisal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="ptrack"><div class="pfill" id="pfill"></div></div>
+    <div class="pmeta"><span id="pstep">Step 1</span><span id="ptot"></span></div></div>
+  <div class="anon">
+    <div><b>Your identity is never shown.</b> The person you rate sees only pooled, unattributed results. Rate honestly.</div></div>
+
+  <div class="card step on" data-step="0">
+    <p class="stitle">Who are you rating?</p>
+    <p class="sdesc">Pick the peer. Their current level sets the &ldquo;now&rdquo; and &ldquo;next&rdquo; anchors on each value.</p>
+    <div class="row2">
+      <div><label class="f">Peer (target)</label><select id="target"><option value="">&mdash; select &mdash;</option></select><div id="tlvl"></div></div>
+      <div><label class="f">Cycle</label><input type="text" id="cycle" oninput="this.value=this.value.toUpperCase()"/></div>
+    </div>
+  </div>
+
+  <div id="clusterSteps"></div>
+
+  <div class="card step" data-step="written">
+    <p class="stitle">Written feedback</p><div id="trackReco" class="trackreco hidden"><p class="f" style="margin:0">Track fit &mdash; which way is this senior growing?</p><p class="guide" style="margin:4px 0 0">Senior forks into two parallel paths. Your read is a recommendation that helps place them &mdash; not a verdict.</p><div class="trkopts"><button type="button" class="trk-opt" data-trk="ic">IC → Principal</button><button type="button" class="trk-opt" data-trk="mg">Management → Supervisor</button><button type="button" class="trk-opt" data-trk="unsure">Too early to say</button></div></div>
+    <p class="sdesc">Specific and behavioural. Pooled and unattributed before the peer ever sees it.</p>
+    <label class="f">Key strengths &mdash; where is this peer strongest, and how does it help the team?</label>
+    <textarea id="key_strength"></textarea>
+    <p class="guide">Name a project or moment you actually saw, not adjectives.</p>
+    <div style="height:14px"></div>
+    <label class="f">Constructive &mdash; one value to grow, with a concrete example.</label>
+    <textarea id="constructive"></textarea>
+    <p class="guide">Frame it as growth, tied to something observable.</p>
+  </div>
+
+  <div class="card step" data-step="review">
+    <p class="stitle">Review &amp; submit</p>
+    <p class="sdesc">Check your ratings. Nothing here is attributed to you.</p>
+    <div id="revBody"></div>
+    <div class="overall"><span style="font-weight:650">Overall (mean of 15)</span><span class="big" id="revOverall">&mdash;</span></div>
+    <label class="confirm"><input type="checkbox" id="confirmAnon"/>
+      <span>I understand this appraisal is submitted <b>anonymously</b> and my ratings are honest and given in good faith.</span></label>
+  </div>
+
+  <div class="law">Peer appraisal is <b>developmental input only</b>. Growth evidence, not a disciplinary record.</div>
+</div>
+
+<div class="nav"><div class="navin">
+  <button class="btn" id="backBtn" onclick="go(-1)">Back</button>
+  <div class="grow"></div>
+  <button class="btn ghost hidden" id="exportBtn" onclick="exportJSON()">Export JSON</button>
+  <button class="btn primary" id="nextBtn" onclick="go(1)">Next</button>
+  <button class="btn primary hidden" id="submitBtn" onclick="submitForm()" disabled>Preview &amp; submit</button>
+</div></div>
+
+<script>
+/* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+let CLUSTERS=[], ROSTER=[], LADDER=['intern','jr','ve','senior','principal'], ALLVALUES=[];
+const SCALE=[[1,'Unsat.'],[2,'Needs'],[3,'Fair'],[4,'Good'],[5,'Excellent']];
+const SCALEFULL={1:'Unsatisfactory',2:'Needs Work',3:'Fair',4:'Good',5:'Excellent'};
+let LVLNAME={intern:'Intern',jr:'Junior',ve:'Video Editor',senior:'Senior',supervisor:'Supervisor',principal:'Principal'};
+const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"supervisor",principal:"principal"};
+function bulletsToAnchor(x){return Array.isArray(x)?x.map(b=>'\u2022  '+b).join('\n'):(x||'');}
+async function loadConfig(){
+  const res=await fetch(`${WORKER_URL}/config`);
+  if(!res.ok) throw new Error('config fetch failed: '+res.status);
+  const cfg=await res.json();
+  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
+  const clusterOrder=[], clusterMap={};
+  cfg.peer_rubric.forEach(row=>{
+    if(!clusterMap[row.cluster]){clusterMap[row.cluster]={name:row.cluster,values:[]};clusterOrder.push(row.cluster);}
+    const lv=row.levels;
+    clusterMap[row.cluster].values.push({label:row.value,anchors:{
+      intern:bulletsToAnchor(lv.intern), jr:bulletsToAnchor(lv.jr), ve:bulletsToAnchor(lv.assoc),
+      senior:bulletsToAnchor(lv.senior), supervisor:bulletsToAnchor(lv.supervisor), principal:bulletsToAnchor(lv.principal)
+    }});
+  });
+  CLUSTERS=clusterOrder.map(c=>clusterMap[c]);
+  ALLVALUES=CLUSTERS.flatMap(c=>c.values.map(v=>v.label));
+}
+const RATER_TOKEN=new URLSearchParams(location.search).get('t')||null;
+const state={ratings:{},target:'',level:'',cycle:'',track_reco:null};
+let STEPS=['0','written','review'];
+let cur=0;
+
+function bullets(txt){
+  if(!txt) return '';
+  return '<ul>'+txt.split('\n').map(l=>l.replace(/^[\u2022\s]+/,'').trim()).filter(Boolean).map(l=>'<li>'+l+'</li>').join('')+'</ul>';
+}
+
+const host=document.getElementById('clusterSteps');
+function buildClusterCards(){
+  host.innerHTML='';
+  CLUSTERS.forEach((cl,ci)=>{
+  const card=document.createElement('div');card.className='card step';card.dataset.step='c'+ci;
+  let h='<p class="stitle">'+cl.name+'</p><p class="sdesc">'+cl.values.length+' value'+(cl.values.length>1?'s':'')+' · rate 1&ndash;5 against where they are now vs the next level.</p>';
+  cl.values.forEach(v=>{
+    h+='<div class="val" data-val="'+v.label+'"><div class="vname">'+v.label+'</div>'
+      +'<div class="anchors">'
+      +'<div class="anc now"><div class="k">At level now &middot; <span class="nowlvl"></span></div><div class="nowtext"></div></div>'
+      +'<div class="nexthost"></div>'
+      +'</div>'
+      +'<div class="scale" role="group" aria-label="1 to 5 rating">'+SCALE.map(function(p){return '<button class="sc" aria-pressed="false" aria-label="Rate '+p[0]+' of 5" data-v="'+v.label+'" data-n="'+p[0]+'">'+p[0]+'<small>'+p[1]+'</small></button>';}).join('')+'</div></div>';
+  });
+  card.innerHTML=h;host.appendChild(card);
+  });
+}
+
+const tgt=document.getElementById('target');
+tgt.onchange=function(){var o=tgt.selectedOptions[0];state.target=tgt.value;state.level=o?o.dataset.lvl:'';
+  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span>':'';paintAnchors();validate();};
+var _cy=document.getElementById('cycle');
+var _now=new Date();var _q=Math.floor(_now.getMonth()/3)+1;_cy.value='Q'+_q+' '+_now.getFullYear();state.cycle=_cy.value;
+_cy.oninput=function(e){state.cycle=e.target.value;validate();};
+
+function paintAnchors(){
+  var lvl=state.level,idx=LADDER.indexOf(lvl),nextLvl=(idx>=0&&idx<LADDER.length-1)?LADDER[idx+1]:null;
+  var isSenior=lvl==='senior';
+  document.querySelectorAll('.val').forEach(function(vb){
+    var label=vb.dataset.val,v=CLUSTERS.flatMap(function(c){return c.values;}).find(function(x){return x.label===label;});
+    vb.querySelector('.nowlvl').textContent=lvl?LVLNAME[lvl]:'\u2014';
+    vb.querySelector('.nowtext').innerHTML=lvl?bullets(v.anchors[lvl]):'<div class="top">Select a peer to load anchors.</div>';
+    var host=vb.querySelector('.nexthost'),nh='';
+    if(isSenior){
+      nh='<div class="anc next ic"><div class="k">Next &middot; Principal<span class="trk">IC track</span></div>'+bullets(v.anchors.principal)+'</div>'
+        +'<div class="anc next mg"><div class="k">Next &middot; Supervisor<span class="trk">Mgmt track</span></div>'+bullets(v.anchors.supervisor)+'</div>';
+    }else if(nextLvl){
+      nh='<div class="anc next"><div class="k">Next level &middot; '+LVLNAME[nextLvl]+'</div>'+bullets(v.anchors[nextLvl])+'</div>';
+    }else{
+      nh='<div class="anc next"><div class="k">Next level &middot; '+(lvl?'top level':'\u2014')+'</div>'+(lvl?'<div class="top">Already at top level.</div>':'')+'</div>';
+    }
+    host.innerHTML=nh;
+  });
+  var tr=document.getElementById('trackReco');
+  if(tr) tr.classList.toggle('hidden',!isSenior);
+}
+
+document.addEventListener('click',function(e){
+  var b=e.target.closest('.sc');if(!b)return;
+  var val=b.dataset.v,n=+b.dataset.n;state.ratings[val]=n;
+  var grp=b.parentElement;grp.querySelectorAll('.sc').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
+  b.classList.add('sel');b.setAttribute('aria-pressed','true');b.style.background=n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)';b.style.color=n===3?'#3d2c00':'#fff';validate();
+});
+
+function go(dir){if(dir>0&&!canLeave(cur))return;cur=Math.max(0,Math.min(STEPS.length-1,cur+dir));paint();}
+function paint(){
+  document.querySelectorAll('.step').forEach(function(s){s.classList.remove('on');});
+  document.querySelector('.step[data-step="'+STEPS[cur]+'"]').classList.add('on');
+  var pct=Math.round((cur/(STEPS.length-1))*100);document.getElementById('pfill').style.width=pct+'%';
+  document.getElementById('ptrack').setAttribute('aria-valuenow',pct);
+  var labels={'0':'Context','written':'Written','review':'Review'};
+  var cName=STEPS[cur].charAt(0)==='c'&&STEPS[cur].length<=3&&!isNaN(+STEPS[cur].slice(1))?CLUSTERS[+STEPS[cur].slice(1)].name:labels[STEPS[cur]];
+  document.getElementById('pstep').textContent='Step '+(cur+1)+' · '+cName;
+  document.getElementById('ptot').textContent=(cur+1)+' / '+STEPS.length;
+  document.getElementById('backBtn').style.visibility=cur===0?'hidden':'visible';
+  var last=cur===STEPS.length-1;
+  document.getElementById('nextBtn').classList.toggle('hidden',last);
+  document.getElementById('submitBtn').classList.toggle('hidden',!last);
+  document.getElementById('exportBtn').classList.toggle('hidden',!last);
+  if(last)buildReview();
+  window.scrollTo({top:0,behavior:'smooth'});validate();
+}
+function canLeave(i){if(STEPS[i]==='0'){if(!state.target||!state.cycle){alert('Pick a peer and enter a cycle first.');return false;}}return true;}
+function validate(){
+  document.getElementById('nextBtn').disabled=STEPS[cur]==='0'&&(!state.target||!state.cycle);
+  var done=ALLVALUES.every(function(v){return state.ratings[v]!=null;});
+  var conf=document.getElementById('confirmAnon').checked;
+  document.getElementById('submitBtn').disabled=!(done&&conf);
+}
+document.getElementById('confirmAnon').addEventListener('change',validate);
+
+function buildReview(){
+  var box=document.getElementById('revBody'),h='';
+  CLUSTERS.forEach(function(cl){
+    h+='<div class="revrow clus"><span>'+cl.name+'</span><span></span></div>';
+    cl.values.forEach(function(v){var s=state.ratings[v.label];
+      h+='<div class="revrow"><span>'+v.label+'</span><b style="color:'+(s?(s<=2?'var(--lo)':s===3?'var(--mid-ink)':'var(--hi)'):'var(--muted)')+'">'+(s?(s+' · '+SCALEFULL[s]):'\u2014 not rated')+'</b></div>';});
+  });
+  box.innerHTML=h;
+  var vals=ALLVALUES.map(function(v){return state.ratings[v];}).filter(function(x){return x!=null;});
+  var ov=vals.length?(vals.reduce(function(a,b){return a+b;},0)/vals.length):null;
+  var el=document.getElementById('revOverall');
+  el.textContent=ov!=null?ov.toFixed(2):'\u2014';
+  el.style.color=ov==null?'var(--muted)':ov<3?'var(--lo)':ov<4?'var(--mid-ink)':'var(--hi)';
+}
+
+function payload(){
+  var vals=ALLVALUES.map(function(v){return state.ratings[v];}).filter(function(x){return x!=null;});
+  return {cycle:state.cycle,target:state.target,target_level:state.level,ratings:Object.assign({},state.ratings),
+    key_strength:document.getElementById('key_strength').value.trim(),
+    constructive:document.getElementById('constructive').value.trim(),
+    overall:vals.length?+(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(2):null,
+    track_reco:state.level==='senior'?state.track_reco:null,_token:RATER_TOKEN};
+}
+function exportJSON(){var blob=new Blob([JSON.stringify(payload(),null,2)],{type:'application/json'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='peer_'+state.target.replace(/\s+/g,'_')+'_'+state.cycle.replace(/\s+/g,'')+'.json';a.click();}
+async function submitForm(){
+  const btn=document.querySelector('[onclick="submitForm()"]')||document.activeElement;
+  try{
+    const r=await fetch(`${WORKER_URL}/submit/peer`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload())});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||r.status);
+    if(j.aggregated){ alert(`Submitted. Peer Scorecard generated (n=${j.n}) and attached to ClickUp task ${j.clickup_task_id}.`); }
+    else { alert(`Submitted. Waiting on ${3-j.n} more response(s) before the aggregate Scorecard can be generated (anonymity threshold).`); }
+  } catch(e){ alert('Failed: '+e.message); }
+}
+document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});
+loadConfig().then(()=>{STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();ROSTER.forEach(function(p){var o=document.createElement('option');o.value=p[0];o.dataset.lvl=p[1];o.textContent=p[0];tgt.appendChild(o);});paint();}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
+</script>
+</body>
+</html>

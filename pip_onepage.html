@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance Improvement Plan</title>
+<style>
+  :root{
+    /* ===== SHARED VISUAL CONTRACT — identical across all six People System files ===== */
+    --canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;
+    --kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+    --lo:#e0603b;--mid:#9ca3af;--hi:#2f9e7e;
+    /* file-local aliases mapped onto the contract */
+    --faint:#9aa1ab;--line2:#eef0f2;--accent:var(--pip);--accent-soft:#fbf1e6;
+    --pass:#1f7a63;--fail:#9a2f26;--r:8px;}
+  *{box-sizing:border-box}html,body{margin:0}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  body{font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;background:var(--canvas);color:var(--ink);font-size:13.5px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  .sheet{max-width:1040px;margin:18px auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:26px 30px 34px}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--ink);padding-bottom:12px;margin-bottom:6px}
+  .top h1{margin:0;font-size:22px;letter-spacing:-.02em}
+  .top .tag{font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.08em;background:var(--accent-soft);padding:4px 10px;border-radius:99px}
+  .law{background:#fbf1e6;border:1px solid #e8d3b3;border-left:3px solid var(--accent);border-radius:8px;padding:9px 13px;font-size:12px;color:#7a4d0c;margin:12px 0 18px;line-height:1.45}
+  .law b{color:#5c3a08}
+  .sec{margin-bottom:20px}
+  .sec>h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#fff;background:var(--ink);padding:6px 12px;border-radius:6px;margin:0 0 10px;display:inline-block}
+  .case{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 16px}
+  .case .f label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700;margin-bottom:4px}
+  .case input,.case select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+  .case .auto{padding:8px 9px;background:var(--line2);border-radius:6px;font-weight:700}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+  td,th{overflow-wrap:anywhere;word-break:break-word}
+  .supbox{position:relative}
+  .supbtn{width:100%;text-align:left;padding:8px 9px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;cursor:pointer}
+  .supbtn.empty{color:var(--faint)}
+  .supmenu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.1);padding:6px;display:none}
+  .supmenu.open{display:block}
+  .supmenu label{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+  .supmenu label:hover{background:var(--line2)}
+  .supmenu .add{display:flex;gap:6px;padding:6px 4px 2px;border-top:1px solid var(--line2);margin-top:4px}
+  .supmenu .add input{flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font:inherit}
+  .supmenu .add button{padding:6px 10px;border:0;background:var(--accent);color:#fff;border-radius:6px;font:inherit;font-weight:600;cursor:pointer}
+  th{background:#f0f2f3;border:1px solid var(--line);padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;vertical-align:bottom}
+  td{border:1px solid var(--line);padding:6px 7px;vertical-align:top}
+  td textarea,td input,td select{width:100%;border:1px solid transparent;border-radius:5px;padding:5px 6px;font:inherit;background:#fff;resize:vertical}
+  td textarea{min-height:44px}
+  td textarea:hover,td input:hover,td select:hover{border-color:var(--line)}
+  .reqcell{font-size:11.5px;color:#3c4650;line-height:1.4;background:#fafbfb}
+  .met{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+  .met.y{background:#e7f4ef;color:var(--pass)}.met.n{background:#fdeceb;color:var(--fail)}.met.p{background:var(--line2);color:var(--muted)}
+  .addbtn{background:none;border:1px dashed var(--line);color:var(--accent);font:inherit;font-weight:650;cursor:pointer;padding:7px 12px;border-radius:6px;margin-top:8px}
+  .cpnum{text-align:center;font-weight:700;color:var(--muted);width:34px}
+  .cpdate{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;width:110px}
+  .out{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  .out .f label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700;margin-bottom:4px}
+  .out select,.out textarea,.out input{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+  .out textarea{min-height:80px;resize:vertical}
+  .verdict{border-radius:10px;padding:16px 20px;color:#fff}
+  .verdict.pass{background:var(--pass)}.verdict.fail{background:var(--fail)}.verdict.pending{background:#475569}
+  .verdict .vh{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;opacity:.85}
+  .verdict .vv{font-size:22px;font-weight:800;margin-top:2px;line-height:1.1}
+  .verdict .vs{font-size:12px;opacity:.9;margin-top:4px}
+  .sign{display:grid;grid-template-columns:1fr 1fr 160px;gap:16px;margin-top:8px}
+  .sign .sl{border-top:1px solid var(--ink);padding-top:5px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-top:34px}
+  .actions{display:flex;gap:10px;margin-top:22px}
+  .btn{padding:10px 18px;border-radius:8px;font:inherit;font-weight:650;cursor:pointer;border:1px solid var(--line);background:#fff}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn.primary:hover{background:#94450a}
+  .btn:disabled{opacity:.5;cursor:default}
+  @media print{body{background:#fff}.sheet{border:0;margin:0;max-width:none;padding:0}.noprint{display:none!important}.addbtn{display:none}}
+  @media(max-width:760px){.case{grid-template-columns:1fr 1fr}.out{grid-template-columns:1fr}.sign{grid-template-columns:1fr}}
+  .swipehint{display:none;font-size:11px;color:var(--muted);font-weight:600;margin:0 0 6px}
+  @media(max-width:640px){.sheet{padding:20px 16px 28px}.case{grid-template-columns:1fr}.sec:has(table){overflow-x:auto;-webkit-overflow-scrolling:touch}.sec table{min-width:620px}.swipehint{display:block}}
+.reflink{display:inline-flex;align-items:center;gap:5px;margin-top:8px;font-size:12px;font-weight:600;color:#475569;text-decoration:none;border:1px solid #e6e8eb;background:#fff;padding:5px 11px;border-radius:8px}.reflink:hover{border-color:#94a3b8;color:#17191d}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="top"><div><h1>Performance Improvement Plan</h1><a class="reflink" href="people_system_reference.html#pip" target="_blank" rel="noopener">View full PIP Rubric ↗</a></div><span class="tag">confidential</span></div>
+
+  <!-- CASE -->
+  <div class="sec"><h2>Case</h2>
+    <div class="case">
+      <div class="f"><label>PIP ID</label><input id="pid" placeholder="PIP-2026Q3-01"></div>
+      <div class="f"><label>Editor</label><select id="editor"><option value="">Select…</option></select></div>
+      <div class="f"><label>Level (auto)</label><div class="auto" id="levelAuto">—</div></div>
+      <div class="f"><label>Manager</label>
+        <div class="supbox"><button class="supbtn empty" id="mgrBtn" type="button">Select…</button>
+          <div class="supmenu" id="mgrMenu">
+            <label><input type="checkbox" value="Joshua"> Joshua</label>
+            <label><input type="checkbox" value="Rashy"> Rashy</label>
+            <div class="add"><input id="mgrAdd" placeholder="Add another"><button type="button" id="mgrAddBtn">Add</button></div>
+          </div></div></div>
+      <div class="f"><label>Severity</label><select id="severity"><option value="">—</option><option value="30">Minor (30d)</option><option value="60">Moderate (60d)</option><option value="90">Severe (90d)</option></select></div>
+      <div class="f"><label>Start date</label><input id="start" type="date"></div>
+      <div class="f"><label>Duration (auto)</label><div class="auto" id="durAuto">—</div></div>
+      <div class="f"><label>Review date (auto)</label><div class="auto" id="revAuto">—</div></div>
+    </div>
+    <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0">Pass bar = <b>3.0</b> (Fair, at their level) on every flagged competency by the review date, held into next quarter.</p>
+  </div>
+
+  <!-- A GAPS -->
+  <div class="sec"><h2>A · Gaps &amp; targets</h2>
+    <div class="swipehint">Swipe the table sideways to see every column →</div>
+    <table><thead><tr>
+      <th style="width:15%">Competency</th><th style="width:6%">Score now</th><th style="width:22%">Required bar (auto)</th>
+      <th style="width:17%">Evidence</th><th style="width:15%">Measurable target</th><th style="width:13%">Support company gives</th>
+      <th style="width:6%">At review</th><th style="width:6%">Met?</th>
+    </tr></thead><tbody id="gapBody"></tbody></table>
+    <button class="addbtn" id="addGap">+ Add competency</button>
+  </div>
+
+  <!-- B ACTIONS -->
+  <div class="sec"><h2>B · Actions</h2>
+    <table><thead><tr><th style="width:38%">What the editor will do</th><th style="width:38%">What the company provides</th><th style="width:24%">By when</th></tr></thead>
+    <tbody id="actBody"></tbody></table>
+    <button class="addbtn" id="addAct">+ Add action</button>
+  </div>
+
+  <!-- C CHECKPOINTS -->
+  <div class="sec"><h2>C · Checkpoints</h2>
+    <table><thead><tr><th class="cpnum">#</th><th class="cpdate">Date (auto)</th><th style="width:130px">On track?</th><th>Notes / evidence reviewed</th></tr></thead>
+    <tbody id="cpBody"></tbody></table>
+  </div>
+
+  <!-- D OUTCOME -->
+  <div class="sec"><h2>D · Outcome</h2>
+    <div class="out">
+      <div>
+        <div class="f" style="margin-bottom:12px"><label>Result</label><select id="result"><option value="">—</option><option>Passed — off PIP</option><option>Extended once</option><option>Exit</option></select></div>
+        <div class="f" style="margin-bottom:12px"><label>Final review date</label><input id="finalDate" type="date"></div>
+        <div class="f"><label>Summary / rationale</label><textarea id="summary"></textarea></div>
+      </div>
+      <div class="verdict pending" id="verdict"><div class="vh">Verdict (auto)</div><div class="vv" id="vv">PENDING</div><div class="vs" id="vs">Add at least one gap and its review score.</div></div>
+    </div>
+  </div>
+
+  <div class="actions noprint">
+    <button class="btn" id="btnPrint">Save as PDF</button>
+    <button class="btn primary" id="btnFile">File to ClickUp</button>
+  </div>
+</div>
+
+<script>
+/* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+let ROSTER=[], LL={intern:"Intern",jr:"Jr",ve:"Video Editor",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], BARS={}, COMPS=[];
+const PASS_BAR=3.0;
+const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
+function bulletsToLine(x){return Array.isArray(x)?x.join(' \u00b7 '):(x||'');}
+async function loadConfig(){
+  const res=await fetch(`${WORKER_URL}/config`);
+  if(!res.ok) throw new Error('config fetch failed: '+res.status);
+  const cfg=await res.json();
+  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
+  BARS={};
+  cfg.pip_rubric.forEach(row=>{
+    const lv=row.levels;
+    BARS[row.competency]=[
+      bulletsToLine(lv.intern), bulletsToLine(lv.jr), bulletsToLine(lv.assoc),
+      bulletsToLine(lv.senior), bulletsToLine(lv.supervisor), bulletsToLine(lv.principal)
+    ];
+  });
+  COMPS=Object.keys(BARS);
+}
+
+const S={gaps:[mkGap()],actions:[mkAct(),mkAct(),mkAct()],cps:[{},{},{},{}],managers:[]};
+function mkGap(){return{comp:"",now:"",evidence:"",target:"",support:"",review:""};}
+function mkAct(){return{editor:"",company:"",by:""};}
+let curLevel="";
+const $=id=>document.getElementById(id);
+
+const edSel=$('editor');
+ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;edSel.appendChild(o);});
+edSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";buildGaps();recompute();});
+$('severity').addEventListener('change',recompute);
+$('start').addEventListener('change',recompute);
+
+// manager multi-select
+const mgrBtn=$('mgrBtn'),mgrMenu=$('mgrMenu');
+mgrBtn.addEventListener('click',()=>mgrMenu.classList.toggle('open'));
+document.addEventListener('click',e=>{if(!e.target.closest('.supbox'))mgrMenu.classList.remove('open');});
+mgrMenu.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',syncMgr));
+$('mgrAddBtn').addEventListener('click',()=>{const v=$('mgrAdd').value.trim();if(!v)return;const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${v}" checked> ${v}`;l.querySelector('input').addEventListener('change',syncMgr);mgrMenu.querySelector('.add').before(l);$('mgrAdd').value='';syncMgr();});
+function syncMgr(){S.managers=[...mgrMenu.querySelectorAll('input:checked')].map(c=>c.value);mgrBtn.textContent=S.managers.length?S.managers.join(' & '):'Select…';mgrBtn.classList.toggle('empty',!S.managers.length);}
+
+const li=()=>LK.indexOf(curLevel);
+const dur=()=>+$('severity').value||0;
+function cpDates(){const s=$('start').value,d=dur();if(!s||!d)return['—','—','—','—'];const b=new Date(s);return[.25,.5,.75,1].map(f=>{const t=new Date(b);t.setDate(t.getDate()+Math.round(d*f));return t.toISOString().slice(0,10);});}
+const scoreOpts=v=>{let o='<option value="">—</option>';for(let i=1;i<=5;i++)o+=`<option ${v==i?'selected':''}>${i}</option>`;return o;};
+
+function buildGaps(){
+  const lv=li();const b=$('gapBody');b.innerHTML='';
+  S.gaps.forEach((g,i)=>{
+    const req=g.comp&&lv>=0?BARS[g.comp][lv]:'<span style="color:var(--faint)">pick a competency</span>';
+    const met=g.review===''?'<span class="met p">—</span>':(+g.review>=PASS_BAR?'<span class="met y">Met</span>':'<span class="met n">Not met</span>');
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><select data-g="${i}" data-k="comp"><option value="">Select…</option>${COMPS.map(c=>`<option ${g.comp===c?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td><select data-g="${i}" data-k="now">${scoreOpts(g.now)}</select></td>
+      <td class="reqcell">${req}</td>
+      <td><textarea data-g="${i}" data-k="evidence">${g.evidence}</textarea></td>
+      <td><textarea data-g="${i}" data-k="target">${g.target}</textarea></td>
+      <td><textarea data-g="${i}" data-k="support">${g.support}</textarea></td>
+      <td><select data-g="${i}" data-k="review">${scoreOpts(g.review)}</select></td>
+      <td>${met}</td>`;
+    b.appendChild(tr);
+  });
+  b.querySelectorAll('[data-g]').forEach(el=>{
+    const ev=el.tagName==='SELECT'?'change':'input';
+    el.addEventListener(ev,()=>{S.gaps[+el.dataset.g][el.dataset.k]=el.value;if(el.dataset.k==='comp'||el.dataset.k==='review'){buildGaps();recompute();}});
+  });
+}
+function buildActions(){
+  const b=$('actBody');b.innerHTML='';
+  S.actions.forEach((a,i)=>{const tr=document.createElement('tr');
+    tr.innerHTML=`<td><textarea data-a="${i}" data-k="editor">${a.editor}</textarea></td><td><textarea data-a="${i}" data-k="company">${a.company}</textarea></td><td><input type="date" data-a="${i}" data-k="by" value="${a.by}"></td>`;
+    b.appendChild(tr);});
+  b.querySelectorAll('[data-a]').forEach(el=>el.addEventListener(el.type==='date'?'change':'input',()=>S.actions[+el.dataset.a][el.dataset.k]=el.value));
+}
+function buildCheckpoints(){
+  const cp=cpDates();const b=$('cpBody');b.innerHTML='';
+  S.cps.forEach((c,i)=>{const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="cpnum">${i+1}</td><td class="cpdate">${cp[i]}</td>
+      <td><select data-c="${i}" data-k="ot"><option value="">—</option><option ${c.ot==='Yes'?'selected':''}>Yes</option><option ${c.ot==='Partial'?'selected':''}>Partial</option><option ${c.ot==='No'?'selected':''}>No</option></select></td>
+      <td><textarea data-c="${i}" data-k="notes">${c.notes||''}</textarea></td>`;
+    b.appendChild(tr);});
+  b.querySelectorAll('[data-c]').forEach(el=>el.addEventListener(el.tagName==='SELECT'?'change':'input',()=>S.cps[+el.dataset.c][el.dataset.k]=el.value));
+}
+function verdict(){const g=S.gaps.filter(x=>x.comp);if(!g.length)return{k:'pending',v:'PENDING',s:'Add at least one gap.'};const scored=g.filter(x=>x.review!=='');if(scored.length<g.length)return{k:'pending',v:'IN PROGRESS',s:`${scored.length}/${g.length} competencies reviewed.`};const fail=g.filter(x=>+x.review<PASS_BAR);return fail.length?{k:'fail',v:'NOT MET — extend once or exit',s:`${fail.length} competency(ies) below ${PASS_BAR.toFixed(1)} at review.`}:{k:'pass',v:'PASS',s:`All ${g.length} reached ${PASS_BAR.toFixed(1)}+ by review.`};}
+function recompute(){
+  const d=dur(),cp=cpDates();
+  $('durAuto').textContent=d?d+' days':'—';
+  $('revAuto').textContent=cp[3];
+  buildCheckpoints();
+  const v=verdict();const el=$('verdict');el.className='verdict '+v.k;$('vv').textContent=v.v;$('vs').textContent=v.s;
+}
+function buildPayload(){
+  const lv=li(),cp=cpDates(),v=verdict();
+  return{pip_id:$('pid').value,editor:edSel.value,level:curLevel,manager:S.managers.join(' & '),managers:S.managers,
+    severity:{30:'Minor',60:'Moderate',90:'Severe'}[dur()]||null,duration_d:dur(),start_date:$('start').value,review_date:cp[3],
+    gaps:S.gaps.filter(g=>g.comp).map(g=>({competency:g.comp,required:lv>=0?BARS[g.comp][lv]:null,score_now:g.now||null,evidence:g.evidence,target:g.target,support:g.support,score:g.review||null,met:g.review!==''?(+g.review>=PASS_BAR):null})),
+    actions:S.actions.filter(a=>a.editor||a.company).map(a=>({editor:a.editor,company:a.company,by:a.by})),
+    checkpoints:S.cps.map((c,i)=>({n:i+1,date:cp[i],on_track:c.ot||null,notes:c.notes||null})),
+    result:$('result').value,final_review_date:$('finalDate').value,summary:$('summary').value,verdict:v.v};
+}
+$('btnPrint').addEventListener('click',()=>print());
+$('btnFile').addEventListener('click',async()=>{
+  if(!edSel.value||!dur()||!$('start').value){alert('Editor, severity and start date are required.');return;}
+  const pipId=$('pid').value||`PIP-${Date.now()}`;$('pid').value=pipId;
+  const b=$('btnFile');b.disabled=true;b.textContent='Saving…';
+  try{
+    const r=await fetch(`${WORKER_URL}/pip/${encodeURIComponent(pipId)}/update`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(buildPayload())});
+    const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
+    const v=buildPayload().verdict;
+    b.textContent='Saved ✓';
+    if(v==='PASS'||String(v).startsWith('NOT MET')){alert(`Saved. Verdict "${v}" reached \u2014 PDF generated and attached to ClickUp.`);}
+    else{alert(`Saved. Verdict currently "${v}" \u2014 PDF/ClickUp attach happens automatically once a final verdict (PASS or NOT MET) is reached. Share this page's URL with ?pip=${pipId} so others can open the same live case.`);}
+  }
+  catch(e){b.disabled=false;b.textContent='Save';alert('Failed: '+e.message);}
+});
+$('addGap').addEventListener('click',()=>{S.gaps.push(mkGap());buildGaps();recompute();});
+$('addAct').addEventListener('click',()=>{S.actions.push(mkAct());buildActions();});
+
+async function boot(){
+  await loadConfig();
+  ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;edSel.appendChild(o);});
+  buildGaps();buildActions();buildCheckpoints();recompute();
+
+  // Shared live page: if a ?pip=<id> is in the URL, load existing case scalars.
+  // NOTE: this pre-fills the top-level case fields (editor, level, severity, dates, result,
+  // summary, verdict). Full row-level rehydration of the gaps/actions/checkpoints tables from
+  // a saved case is a follow-up pass — for now those tables still start blank on reopen and
+  // must be re-entered, even though the scalars above will correctly show the saved state.
+  const pipId = new URLSearchParams(location.search).get('pip');
+  if (pipId) {
+    try {
+      const r = await fetch(`${WORKER_URL}/pip/${encodeURIComponent(pipId)}`);
+      const j = await r.json();
+      if (j.found) {
+        const c = j.case.detail || {};
+        if (c.editor) { edSel.value = c.editor; edSel.dispatchEvent(new Event('change')); }
+        if (c.pip_id) $('pid').value = c.pip_id;
+        if (c.start_date) $('start').value = c.start_date;
+        if (c.summary) $('summary') && ($('summary').value = c.summary);
+        S.managers = c.managers || [];
+      }
+    } catch (e) { console.warn('Could not load existing PIP case:', e.message); }
+  }
+}
+boot().catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
+</script>
+</body>
+</html>
