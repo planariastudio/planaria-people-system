@@ -81,7 +81,7 @@
   <div class="prog"><div class="ptrack" role="progressbar" aria-label="Appraisal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="ptrack"><div class="pfill" id="pfill"></div></div>
     <div class="pmeta"><span id="pstep">Step 1</span><span id="ptot"></span></div></div>
   <div class="anon">
-    <div><b>Your identity is never shown.</b> The person you rate sees only pooled, unattributed results. Rate honestly.</div></div>
+    <div><b>Ratings are pooled once there's more than one response.</b> With only one response so far, the report reflects that single rating directly. Rate honestly.</div></div>
 
   <div class="card step on" data-step="0">
     <p class="stitle">Who are you rating?</p>
@@ -121,7 +121,6 @@
 <div class="nav"><div class="navin">
   <button class="btn" id="backBtn" onclick="go(-1)">Back</button>
   <div class="grow"></div>
-  <button class="btn ghost hidden" id="exportBtn" onclick="exportJSON()">Export JSON</button>
   <button class="btn primary" id="nextBtn" onclick="go(1)">Next</button>
   <button class="btn primary hidden" id="submitBtn" onclick="submitForm()" disabled>Preview &amp; submit</button>
 </div></div>
@@ -240,11 +239,22 @@ function paint(){
   var last=cur===STEPS.length-1;
   document.getElementById('nextBtn').classList.toggle('hidden',last);
   document.getElementById('submitBtn').classList.toggle('hidden',!last);
-  document.getElementById('exportBtn').classList.toggle('hidden',!last);
   if(last)buildReview();
   window.scrollTo({top:0,behavior:'smooth'});validate();
 }
-function canLeave(i){if(STEPS[i]==='0'){if(!state.target||!state.cycle){alert('Pick a peer and enter a cycle first.');return false;}}return true;}
+function canLeave(i){
+  if(STEPS[i]==='0'){if(!state.target||!state.cycle){alert('Pick a peer and enter a cycle first.');return false;}}
+  if(STEPS[i].charAt(0)==='c'&&STEPS[i].length<=3&&!isNaN(+STEPS[i].slice(1))){
+    var cl=CLUSTERS[+STEPS[i].slice(1)];
+    var missing=cl.values.find(function(v){return state.ratings[v.label]==null;});
+    if(missing){alert('Rate "'+missing.label+'" before continuing.');return false;}
+  }
+  if(STEPS[i]==='written'){
+    if(!document.getElementById('key_strength').value.trim()){alert('Fill in "key strength" before continuing.');return false;}
+    if(!document.getElementById('constructive').value.trim()){alert('Fill in the constructive feedback field before continuing.');return false;}
+  }
+  return true;
+}
 function validate(){
   document.getElementById('nextBtn').disabled=STEPS[cur]==='0'&&(!state.target||!state.cycle);
   var done=ALLVALUES.every(function(v){return state.ratings[v]!=null;});
@@ -276,17 +286,14 @@ function payload(){
     overall:vals.length?+(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(2):null,
     track_reco:state.level==='senior'?state.track_reco:null,_token:RATER_TOKEN};
 }
-function exportJSON(){var blob=new Blob([JSON.stringify(payload(),null,2)],{type:'application/json'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='peer_'+state.target.replace(/\s+/g,'_')+'_'+state.cycle.replace(/\s+/g,'')+'.json';a.click();}
 async function submitForm(){
   const btn=document.querySelector('[onclick="submitForm()"]')||document.activeElement;
   try{
     const r=await fetch(`${WORKER_URL}/submit/peer`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload())});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||r.status);
-    if(j.aggregated){ alert(`Submitted. Peer Scorecard generated (n=${j.n}) and attached to ClickUp task ${j.clickup_task_id}.`); }
-    else { alert(`Submitted. Waiting on ${3-j.n} more response(s) before the aggregate Scorecard can be generated (anonymity threshold).`); }
+    if(j.aggregated){ alert(j.n===1?`Submitted. Filed directly to ClickUp task ${j.clickup_task_id} (this is the only response so far).`:`Submitted. Peer Scorecard updated with all ${j.n} responses and attached to ClickUp task ${j.clickup_task_id}.`); }
+    else { alert(`Submitted.`); }
   } catch(e){ alert('Failed: '+e.message); }
 }
 document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});

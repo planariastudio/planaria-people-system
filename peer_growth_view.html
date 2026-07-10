@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Peer Scorecard · anonymized</title>
+<title>Peer Scorecard</title>
 <style>
 :root{
 /* ===== SHARED VISUAL CONTRACT — identical across all six People System files ===== */
@@ -95,7 +95,7 @@ const SEED={
    'Ready to formalize mentoring; the leadership signal is there to grow.'
  ]
 };
-const MIN_N=3;
+const MIN_N=1;
 const CLUSTERS=[
  ['Underdog Mindset',['Growth Potential','Agility','Continuous Improvement']],
  ['Selfless Collaboration',['Teamwork','Knowledge Sharing','Conflict Resolution']],
@@ -120,7 +120,7 @@ function distBars(scores){
 function render(){
  const S=SEED;
  if(S.n<MIN_N){document.getElementById('doc').innerHTML=
-   `<div class="section"><div class="stitle">Withheld</div><p>Fewer than ${MIN_N} peer responses (${S.n}). This view is withheld to protect anonymity on a small team.</p></div>`;return;}
+   `<div class="section"><div class="stitle">No responses yet</div><p>No peer responses recorded for this cycle.</p></div>`;return;}
  const allVals=CLUSTERS.flatMap(c=>c[1]);
  const overall=mean(allVals.map(v=>mean(S.values[v])));
  // clusters
@@ -162,7 +162,7 @@ function render(){
       <div class="big">${fmt(overall)}</div>
       <div class="sub">mean of 15 values</div></div></div>
   </div>
-  <div class="anon">&#128274;<div><b>Anonymous aggregate.</b> Individual ratings and rater identities are never shown here. Views with fewer than ${MIN_N} responses are withheld. This is developmental input, not a disciplinary record.</div></div>
+  <div class="anon"><div><b>Pooled from all responses.</b> With one response, the report reflects that rating directly; with more than one, scores are averaged into the view below. This is developmental input, not a disciplinary record.</div></div>
   <div class="section"><div class="stitle">Cluster means</div><div class="clusters">${clhtml}</div></div>
   <div class="section"><div class="stitle">By value · mean + how peers rated (1&ndash;5)</div>${vhtml}</div>
   ${trackHtml}
@@ -170,7 +170,7 @@ function render(){
     <div class="pooled"><div class="who">Strengths</div><ul>${S.pooled_strengths.map(x=>'<li>'+x+'</li>').join('')}</ul></div>
     <div class="pooled"><div class="who">To grow</div><ul>${S.pooled_constructive.map(x=>'<li>'+x+'</li>').join('')}</ul></div>
   </div>
-  <div class="foot">Anonymized recipient view · rater identity never rendered · comments pooled, not attributed · min-N ${MIN_N} suppression active. Sample data shown.</div>`;
+  <div class="foot">Peer Scorecard · comments pooled when n&gt;1 · Sample data shown.</div>`;
 }
 render();
 </script>

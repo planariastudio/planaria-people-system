@@ -192,6 +192,7 @@
   <div id="ctxErr" class="err" hidden>Select an editor to begin — the level bar and targets load from their level.</div>
   <div class="prog"><div class="bar" role="progressbar" aria-label="Scorecard progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><div class="fill" id="fill" style="width:0%"></div></div><div class="lbl" id="progLbl">—</div></div>
   <div id="stepHost"></div>
+  <div id="stepErr" class="err" hidden style="margin-top:10px"></div>
 </div>
 
 <div id="preview">
@@ -265,6 +266,25 @@ const qEl=document.getElementById('quarter');
 qEl.addEventListener('input',()=>{const p=qEl.selectionStart;qEl.value=qEl.value.toUpperCase();qEl.setSelectionRange(p,p);});
 
 function BAND(v){if(v<=2.49)return'b12';if(v<3.5)return'b3';return'b45';}
+function stepIncomplete(){
+  if(stepIdx<KPI.length){
+    const c=KPI[stepIdx];
+    for(let mi=0;mi<c.metrics.length;mi++){
+      const key=`${stepIdx}-${mi}`;
+      if(S.self[key]==null) return `Rate "${c.metrics[mi][0]}" (self) before continuing.`;
+      if(S.spv[key]==null) return `Rate "${c.metrics[mi][0]}" (supervisor) before continuing.`;
+    }
+    return null;
+  }
+  if(stepIdx===KPI.length){
+    const f=S.focus[0];
+    if(!f||!f.area||!f.why||!f.action||!f.measure||!f.priority) return 'Fill in Focus 1 (area, why, agreed action, how to measure, priority) before continuing.';
+    for(let i=0;i<EDITOR_ROWS.length;i++){ if(!S.sum[`e${i}`]) return `Fill in "${EDITOR_ROWS[i]}" (editor side) before continuing.`; }
+    for(let i=0;i<SPV_ROWS.length;i++){ if(!S.sum[`s${i}`]) return `Fill in "${SPV_ROWS[i]}" (supervisor side) before continuing.`; }
+    return null;
+  }
+  return null;
+}
 function levelIdx(){return LK.indexOf(curLevel);}
 function catAvg(ci,who){const v=KPI[ci].metrics.map((_,mi)=>S[who][`${ci}-${mi}`]).filter(x=>x);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
 function overall(who){const c=KPI.map((_,ci)=>catAvg(ci,who)).filter(x=>x!=null);return c.length?c.reduce((a,b)=>a+b,0)/c.length:null;}
@@ -272,6 +292,7 @@ const fmt=v=>v==null?"—":v.toFixed(2);
 
 const host=document.getElementById('stepHost');
 function render(){
+  const se=document.getElementById('stepErr');if(se)se.hidden=true;
   const pct=Math.round(stepIdx/(TOTAL-1)*100);
   document.getElementById('fill').style.width=pct+'%';
   document.getElementById('progBar').setAttribute('aria-valuenow',pct);
@@ -356,7 +377,7 @@ function wire(){
   host.querySelectorAll('[data-sum]').forEach(t=>t.addEventListener('input',()=>S.sum[t.dataset.sum]=t.value));
 }
 document.getElementById('btnBack').addEventListener('click',()=>{if(stepIdx>0){stepIdx--;render();scrollTo(0,0);}});
-document.getElementById('btnNext').addEventListener('click',()=>{if(stepIdx<TOTAL-1){if(stepIdx===0&&!empSel.value){const err=document.getElementById('ctxErr');err.hidden=false;empSel.classList.add('bad');empSel.focus();return;}stepIdx++;render();scrollTo(0,0);}else openPreview();});
+document.getElementById('btnNext').addEventListener('click',()=>{if(stepIdx<TOTAL-1){if(stepIdx===0&&!empSel.value){const err=document.getElementById('ctxErr');err.hidden=false;empSel.classList.add('bad');empSel.focus();return;}const msg=stepIncomplete();if(msg){const se=document.getElementById('stepErr');se.textContent=msg;se.hidden=false;scrollTo(0,0);return;}stepIdx++;render();scrollTo(0,0);}else{const msg=stepIncomplete();if(msg){const se=document.getElementById('stepErr');se.textContent=msg;se.hidden=false;scrollTo(0,0);return;}openPreview();}});
 empSel.addEventListener('change',()=>{document.getElementById('ctxErr').hidden=true;empSel.classList.remove('bad');});
 
 function buildPayload(){
@@ -396,14 +417,13 @@ function reportHTML(d){
     <div class="hero ${po!=null?BAND(po):''}"><div><div class="big">${fmt(po)}<span class="of"> / 5</span></div><div class="lab">Official KPI · supervisor overall</div></div><div class="side">${side}</div></div>
     ${body}${focus}${sum}
     <p class="hint" style="margin-top:14px">Supervisor overall is the recorded KPI; the self-rating is calibration only.</p>
-    <button class="btn ghost" id="jsonLink">Export JSON</button></div>`;
+    </div>`;
 }
 async function submitToWorker(){
   const b=document.getElementById('pvSubmit');b.disabled=true;b.textContent='Filing…';
   try{const r=await fetch(`${WORKER_URL}/submit/kpi`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(buildPayload())});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);b.textContent='Filed ✓';alert(`Stored + PDF attached to ClickUp.\nClickUp task: ${j.clickup_task_id||'(none)'}`);}
   catch(e){b.textContent='File to ClickUp';b.disabled=false;alert('Failed: '+e.message);}
 }
-document.addEventListener('click',e=>{if(e.target.id==='jsonLink'){const blob=new Blob([JSON.stringify(buildPayload(),null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`kpi_${(empSel.value||'draft').replace(/\s+/g,'_')}.json`;a.click();}});
 loadConfig().then(()=>{TOTAL=KPI.length+2;ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;empSel.appendChild(o);});render();}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
 </script>
 <script>

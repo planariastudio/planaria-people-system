@@ -253,10 +253,36 @@ function buildPayload(){
     checkpoints:S.cps.map((c,i)=>({n:i+1,date:cp[i],on_track:c.ot||null,notes:c.notes||null})),
     result:$('result').value,final_review_date:$('finalDate').value,summary:$('summary').value,verdict:v.v};
 }
+function quarterTag(dateStr){
+  const d=dateStr?new Date(dateStr):new Date();
+  const q=Math.floor(d.getMonth()/3)+1;
+  return `${d.getFullYear()}Q${q}`;
+}
+function setupIncomplete(){
+  const filledGaps=S.gaps.filter(g=>g.comp);
+  if(!filledGaps.length) return 'Add at least one competency gap.';
+  const bad=filledGaps.find(g=>!g.now||!g.evidence.trim()||!g.target.trim()||!g.support.trim());
+  if(bad) return `Fill in now-score, evidence, target, and support for "${bad.comp}".`;
+  const filledActions=S.actions.filter(a=>a.editor||a.company);
+  if(!filledActions.length) return 'Add at least one support action.';
+  const badAct=filledActions.find(a=>!a.editor.trim()||!a.company.trim()||!a.by);
+  if(badAct) return 'Fill in editor action, company support, and a date for every action row you started.';
+  return null;
+}
 $('btnPrint').addEventListener('click',()=>print());
 $('btnFile').addEventListener('click',async()=>{
   if(!edSel.value||!dur()||!$('start').value){alert('Editor, severity and start date are required.');return;}
-  const pipId=$('pid').value||`PIP-${Date.now()}`;$('pid').value=pipId;
+  const setupMsg=setupIncomplete();
+  if(setupMsg){alert(setupMsg);return;}
+  let pipId=$('pid').value;
+  if(!pipId){
+    try{
+      const qr=await fetch(`${WORKER_URL}/pip/next-id?quarter=${encodeURIComponent(quarterTag($('start').value))}`);
+      const qj=await qr.json();
+      pipId=qj.id||`PIP-${Date.now()}`;
+    }catch(e){pipId=`PIP-${Date.now()}`;}
+  }
+  $('pid').value=pipId;
   const b=$('btnFile');b.disabled=true;b.textContent='Saving…';
   try{
     const r=await fetch(`${WORKER_URL}/pip/${encodeURIComponent(pipId)}/update`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(buildPayload())});
