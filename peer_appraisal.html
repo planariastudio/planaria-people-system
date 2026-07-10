@@ -135,9 +135,19 @@ const SCALEFULL={1:'Unsatisfactory',2:'Needs Work',3:'Fair',4:'Good',5:'Excellen
 let LVLNAME={intern:'Intern',jr:'Junior',ve:'Video Editor',senior:'Senior',supervisor:'Supervisor',principal:'Principal'};
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"supervisor",principal:"principal"};
 function bulletsToAnchor(x){return Array.isArray(x)?x.map(b=>'\u2022  '+b).join('\n'):(x||'');}
+async function fetchWithRetry(url,tries=4,delayMs=700){
+  let lastErr;
+  for(let i=0;i<tries;i++){
+    try{
+      const res=await fetch(url);
+      if(!res.ok) throw new Error('config fetch failed: '+res.status);
+      return res;
+    }catch(e){lastErr=e; if(i<tries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));}
+  }
+  throw lastErr;
+}
 async function loadConfig(){
-  const res=await fetch(`${WORKER_URL}/config`);
-  if(!res.ok) throw new Error('config fetch failed: '+res.status);
+  const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
   ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
   const clusterOrder=[], clusterMap={};

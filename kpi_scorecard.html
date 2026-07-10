@@ -216,9 +216,19 @@ const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
 let ROSTER=[], LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], KPI=[];
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
 function bulletsToLine(x){return Array.isArray(x)?x.join(' '):(x||'');}
+async function fetchWithRetry(url,tries=4,delayMs=700){
+  let lastErr;
+  for(let i=0;i<tries;i++){
+    try{
+      const res=await fetch(url);
+      if(!res.ok) throw new Error('config fetch failed: '+res.status);
+      return res;
+    }catch(e){lastErr=e; if(i<tries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));}
+  }
+  throw lastErr;
+}
 async function loadConfig(){
-  const res=await fetch(`${WORKER_URL}/config`);
-  if(!res.ok) throw new Error('config fetch failed: '+res.status);
+  const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
   ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
   const catOrder=[], catMap={};
@@ -254,6 +264,7 @@ function syncSupers(){S.supers=[...supMenu.querySelectorAll('input:checked')].ma
 const qEl=document.getElementById('quarter');
 qEl.addEventListener('input',()=>{const p=qEl.selectionStart;qEl.value=qEl.value.toUpperCase();qEl.setSelectionRange(p,p);});
 
+function BAND(v){if(v<=2.49)return'b12';if(v<3.5)return'b3';return'b45';}
 function levelIdx(){return LK.indexOf(curLevel);}
 function catAvg(ci,who){const v=KPI[ci].metrics.map((_,mi)=>S[who][`${ci}-${mi}`]).filter(x=>x);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
 function overall(who){const c=KPI.map((_,ci)=>catAvg(ci,who)).filter(x=>x!=null);return c.length?c.reduce((a,b)=>a+b,0)/c.length:null;}

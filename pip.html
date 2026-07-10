@@ -148,9 +148,19 @@ let ROSTER=[], LL={intern:"Intern",jr:"Jr",ve:"Video Editor",senior:"Senior",spv
 const PASS_BAR=3.0;
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
 function bulletsToLine(x){return Array.isArray(x)?x.join(' \u00b7 '):(x||'');}
+async function fetchWithRetry(url,tries=4,delayMs=700){
+  let lastErr;
+  for(let i=0;i<tries;i++){
+    try{
+      const res=await fetch(url);
+      if(!res.ok) throw new Error('config fetch failed: '+res.status);
+      return res;
+    }catch(e){lastErr=e; if(i<tries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));}
+  }
+  throw lastErr;
+}
 async function loadConfig(){
-  const res=await fetch(`${WORKER_URL}/config`);
-  if(!res.ok) throw new Error('config fetch failed: '+res.status);
+  const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
   ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
   BARS={};
@@ -266,11 +276,8 @@ async function boot(){
   ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;edSel.appendChild(o);});
   buildGaps();buildActions();buildCheckpoints();recompute();
 
-  // Shared live page: if a ?pip=<id> is in the URL, load existing case scalars.
-  // NOTE: this pre-fills the top-level case fields (editor, level, severity, dates, result,
-  // summary, verdict). Full row-level rehydration of the gaps/actions/checkpoints tables from
-  // a saved case is a follow-up pass — for now those tables still start blank on reopen and
-  // must be re-entered, even though the scalars above will correctly show the saved state.
+  // Shared live page: if a ?pip=<id> is in the URL, load existing case and rehydrate
+  // BOTH scalars and the gaps/actions/checkpoints tables row-by-row.
   const pipId = new URLSearchParams(location.search).get('pip');
   if (pipId) {
     try {
@@ -278,11 +285,35 @@ async function boot(){
       const j = await r.json();
       if (j.found) {
         const c = j.case.detail || {};
+        // Editor/level — set first since buildGaps() needs curLevel for required-bar lookup.
         if (c.editor) { edSel.value = c.editor; edSel.dispatchEvent(new Event('change')); }
         if (c.pip_id) $('pid').value = c.pip_id;
+        if (c.duration_d) $('severity').value = c.duration_d;
         if (c.start_date) $('start').value = c.start_date;
-        if (c.summary) $('summary') && ($('summary').value = c.summary);
+        if (c.result) $('result').value = c.result;
+        if (c.final_review_date) $('finalDate').value = c.final_review_date;
+        if (c.summary) $('summary').value = c.summary;
         S.managers = c.managers || [];
+        syncMgr();
+        mgrMenu.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = S.managers.includes(cb.value));
+
+        // Row-level rehydration — map saved payload shape back onto internal S.* shape.
+        if (Array.isArray(c.gaps) && c.gaps.length) {
+          S.gaps = c.gaps.map(g => ({
+            comp: g.competency || '', now: g.score_now != null ? String(g.score_now) : '',
+            evidence: g.evidence || '', target: g.target || '', support: g.support || '',
+            review: g.score != null ? String(g.score) : ''
+          }));
+        }
+        if (Array.isArray(c.actions) && c.actions.length) {
+          S.actions = c.actions.map(a => ({ editor: a.editor || '', company: a.company || '', by: a.by || '' }));
+        }
+        if (Array.isArray(c.checkpoints) && c.checkpoints.length) {
+          S.cps = c.checkpoints.map(cp => ({ ot: cp.on_track || '', notes: cp.notes || '' }));
+          while (S.cps.length < 4) S.cps.push({});
+        }
+        // Repaint all three tables + verdict now that S.* holds restored data.
+        buildGaps(); buildActions(); buildCheckpoints(); recompute();
       }
     } catch (e) { console.warn('Could not load existing PIP case:', e.message); }
   }
