@@ -81,7 +81,7 @@
   <!-- CASE -->
   <div class="sec"><h2>Case</h2>
     <div class="case">
-      <div class="f"><label>PIP ID</label><input id="pid" placeholder="PIP-2026Q3-01"></div>
+      <div class="f"><label>PIP ID</label><input id="pid" placeholder="Auto-generated" readonly style="background:#f3f4f6;color:#6b7280"></div>
       <div class="f"><label>Editor</label><select id="editor"><option value="">Select…</option></select></div>
       <div class="f"><label>Level (auto)</label><div class="auto" id="levelAuto">—</div></div>
       <div class="f"><label>Manager</label>
@@ -182,9 +182,20 @@ const $=id=>document.getElementById(id);
 
 const edSel=$('editor');
 ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;edSel.appendChild(o);});
-edSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";buildGaps();recompute();});
+let loadedFromLink=false; // true when opened via ?pip= (don't regenerate id)
+async function maybeAutoId(){
+  if(loadedFromLink) return;
+  if($('pid').value) return;
+  if(!edSel.value||!$('start').value) return;
+  try{
+    const qr=await fetch(`${WORKER_URL}/pip/next-id?quarter=${encodeURIComponent(quarterTag($('start').value))}&editor=${encodeURIComponent(edSel.value)}`);
+    const qj=await qr.json();
+    if(qj.id) $('pid').value=qj.id;
+  }catch(e){}
+}
+edSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";buildGaps();recompute();maybeAutoId();});
 $('severity').addEventListener('change',recompute);
-$('start').addEventListener('change',recompute);
+$('start').addEventListener('change',()=>{recompute();maybeAutoId();});
 
 // manager multi-select
 const mgrBtn=$('mgrBtn'),mgrMenu=$('mgrMenu');
@@ -319,6 +330,7 @@ async function boot(){
   // BOTH scalars and the gaps/actions/checkpoints tables row-by-row.
   const pipId = new URLSearchParams(location.search).get('pip');
   if (pipId) {
+    loadedFromLink = true; // prevent maybeAutoId from overwriting the loaded id
     try {
       const r = await fetch(`${WORKER_URL}/pip/${encodeURIComponent(pipId)}`);
       const j = await r.json();
