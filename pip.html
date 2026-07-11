@@ -284,7 +284,7 @@ async function savePip(finalizing){
   let pipId=$('pid').value;
   if(!pipId){
     try{
-      const qr=await fetch(`${WORKER_URL}/pip/next-id?quarter=${encodeURIComponent(quarterTag($('start').value))}`);
+      const qr=await fetch(`${WORKER_URL}/pip/next-id?quarter=${encodeURIComponent(quarterTag($('start').value))}&editor=${encodeURIComponent(edSel.value)}`);
       const qj=await qr.json();
       pipId=qj.id||`PIP-${Date.now()}`;
     }catch(e){pipId=`PIP-${Date.now()}`;}
