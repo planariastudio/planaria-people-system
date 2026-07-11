@@ -187,32 +187,39 @@ let loadedFromLink=false; // true when opened via ?pip= (don't regenerate id)
 let currentIsOpen=false;   // true when the loaded case is an existing open PIP
 async function maybeAutoId(){
   if(loadedFromLink) return;
-  if(!edSel.value||!$('start').value) return;
-  // Check if this editor already has an open (unfiled) PIP.
+  if(!edSel.value) return;
+  // Check if this editor already has an open (unfiled) PIP — needs only the editor.
   try{
     const or=await fetch(`${WORKER_URL}/pip/open?editor=${encodeURIComponent(edSel.value)}`);
     const oj=await or.json();
     if(oj.open){
-      // Load the existing open case instead of making a new one.
       await loadCase(oj.id);
       currentIsOpen=true;
-      $('stepErr') && ($('stepErr').hidden=true);
       const note=$('openNote');
       if(note){note.hidden=false;note.innerHTML=`<b>${edSel.value}</b> already has an open PIP (<b>${oj.id}</b>) — loaded it below. Finish and file it before starting a new one.`;}
       return;
     }
   }catch(e){/* fall through to new-id */}
-  // No open PIP — generate the next id for a fresh case.
+  // No open PIP — clear the note and generate the next id (needs a start date for the quarter).
   const note=$('openNote'); if(note) note.hidden=true;
   currentIsOpen=false;
-  if($('pid').value) return;
+  if(!$('start').value){ $('pid').value=''; $('pid').placeholder='Set a start date to generate the ID'; return; }
   try{
     const qr=await fetch(`${WORKER_URL}/pip/next-id?quarter=${encodeURIComponent(quarterTag($('start').value))}&editor=${encodeURIComponent(edSel.value)}`);
     const qj=await qr.json();
     if(qj.id) $('pid').value=qj.id;
   }catch(e){}
 }
-edSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";buildGaps();recompute();maybeAutoId();});
+function resetCaseState(){
+  // Wipe any loaded case so switching editors never carries the old ID/data.
+  $('pid').value=''; $('pid').placeholder='Auto-generated';
+  currentIsOpen=false;
+  const note=$('openNote'); if(note) note.hidden=true;
+  $('result').value=''; $('finalDate').value=''; $('summary').value='';
+  S.gaps=[mkGap()]; S.actions=[mkAct(),mkAct(),mkAct()]; S.cps=[{},{},{},{}];
+  buildGaps(); buildActions(); buildCheckpoints();
+}
+edSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";if(!loadedFromLink)resetCaseState();buildGaps();recompute();maybeAutoId();});
 $('severity').addEventListener('change',recompute);
 $('start').addEventListener('change',()=>{recompute();maybeAutoId();});
 
