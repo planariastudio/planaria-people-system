@@ -136,8 +136,8 @@
   </div>
 
   <div class="actions noprint">
-    <button class="btn" id="btnPrint">Save as PDF</button>
-    <button class="btn primary" id="btnFile">File to ClickUp</button>
+    <button class="btn" id="btnSave">Save progress</button>
+    <button class="btn primary" id="btnFile" disabled title="Available once a final verdict (PASS or NOT MET) is reached">File verdict</button>
   </div>
 </div>
 
@@ -243,6 +243,12 @@ function recompute(){
   $('revAuto').textContent=cp[3];
   buildCheckpoints();
   const v=verdict();const el=$('verdict');el.className='verdict '+v.k;$('vv').textContent=v.v;$('vs').textContent=v.s;
+  const fileBtn=$('btnFile');
+  if(fileBtn){
+    const isFinal=(v.k==='pass'||v.k==='fail');
+    fileBtn.disabled=!isFinal;
+    fileBtn.title=isFinal?'File this verdict to ClickUp':'Available once a final verdict (PASS or NOT MET) is reached';
+  }
 }
 function buildPayload(){
   const lv=li(),cp=cpDates(),v=verdict();
@@ -269,11 +275,12 @@ function setupIncomplete(){
   if(badAct) return 'Fill in editor action, company support, and a date for every action row you started.';
   return null;
 }
-$('btnPrint').addEventListener('click',()=>print());
-$('btnFile').addEventListener('click',async()=>{
+async function savePip(finalizing){
   if(!edSel.value||!dur()||!$('start').value){alert('Editor, severity and start date are required.');return;}
-  const setupMsg=setupIncomplete();
-  if(setupMsg){alert(setupMsg);return;}
+  if(finalizing){
+    const setupMsg=setupIncomplete();
+    if(setupMsg){alert(setupMsg);return;}
+  }
   let pipId=$('pid').value;
   if(!pipId){
     try{
@@ -283,17 +290,23 @@ $('btnFile').addEventListener('click',async()=>{
     }catch(e){pipId=`PIP-${Date.now()}`;}
   }
   $('pid').value=pipId;
-  const b=$('btnFile');b.disabled=true;b.textContent='Saving…';
+  const b=finalizing?$('btnFile'):$('btnSave');
+  const orig=b.textContent;b.disabled=true;b.textContent='Saving…';
   try{
     const r=await fetch(`${WORKER_URL}/pip/${encodeURIComponent(pipId)}/update`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(buildPayload())});
     const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
-    const v=buildPayload().verdict;
-    b.textContent='Saved ✓';
-    if(v==='PASS'||String(v).startsWith('NOT MET')){alert(`Saved. Verdict "${v}" reached \u2014 PDF generated and attached to ClickUp.`);}
-    else{alert(`Saved. Verdict currently "${v}" \u2014 PDF/ClickUp attach happens automatically once a final verdict (PASS or NOT MET) is reached. Share this page's URL with ?pip=${pipId} so others can open the same live case.`);}
+    b.textContent=finalizing?'Filed ✓':'Saved ✓';
+    if(finalizing){
+      alert(`Verdict filed to ClickUp (task ${j.clickup_task_id}). Live case link: this page's URL with ?pip=${pipId}`);
+    }else{
+      alert(`Progress saved. Reopen or share this case anytime with: this page's URL + ?pip=${pipId}`);
+    }
+    setTimeout(()=>{b.disabled=false;b.textContent=orig;recompute();},1500);
   }
-  catch(e){b.disabled=false;b.textContent='Save';alert('Failed: '+e.message);}
-});
+  catch(e){b.disabled=false;b.textContent=orig;alert('Failed: '+e.message);}
+}
+$('btnSave').addEventListener('click',()=>savePip(false));
+$('btnFile').addEventListener('click',()=>savePip(true));
 $('addGap').addEventListener('click',()=>{S.gaps.push(mkGap());buildGaps();recompute();});
 $('addAct').addEventListener('click',()=>{S.actions.push(mkAct());buildActions();});
 
