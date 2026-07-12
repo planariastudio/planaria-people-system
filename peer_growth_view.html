@@ -73,29 +73,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:6px 0 0}
 <div class="doc" id="doc"></div>
 </div>
 <script>
-// ==== SEED (swap for real anonymized aggregate from the store) ====
-const SEED={
- ratee:'Eduardus Kent Sutanza', level:'senior', cycle:'2026 Q3', n:5,
- // per value: array of the N peer scores (identities never stored here)
- values:{
-  'Growth Potential':[4,4,5,4,3],'Agility':[4,3,4,4,4],'Continuous Improvement':[3,4,4,3,4],
-  'Teamwork':[5,4,5,4,4],'Knowledge Sharing':[4,5,4,4,5],'Conflict Resolution':[4,4,3,4,4],
-  'Communication & Handoff':[3,4,4,3,4],'Visibility':[4,4,4,5,4],'Deep Dive':[4,5,4,4,4],
-  'Accountability':[5,4,5,4,5],'Reliability & Deadlines':[4,4,3,4,4],'Fill-the-Gap Attitude':[5,4,4,5,4],'Quality of Work':[5,5,4,5,4],
-  'Integrity':[5,4,5,5,4],'Earn Trust':[4,5,4,5,4]
- },
- // senior only: peer track recommendations
- track_reco:{mg:3, ic:1, unsure:1},
- pooled_strengths:[
-   'Trusted on the hardest edits — peers route difficult footage to them.',
-   'Quietly lifts the people around them; strong on ownership and reliability.'
- ],
- pooled_constructive:[
-   'Communication cadence can lag on parallel projects — surface status earlier.',
-   'Ready to formalize mentoring; the leadership signal is there to grow.'
- ]
-};
-const MIN_N=1;
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
 const CLUSTERS=[
  ['Underdog Mindset',['Growth Potential','Agility','Continuous Improvement']],
  ['Selfless Collaboration',['Teamwork','Knowledge Sharing','Conflict Resolution']],
@@ -103,10 +81,13 @@ const CLUSTERS=[
  ['Ownership',['Accountability','Reliability & Deadlines','Fill-the-Gap Attitude','Quality of Work']],
  ['True Leadership',['Integrity','Earn Trust']]
 ];
-const LVLNAME={intern:'Intern',jr:'Junior',ve:'Video Editor',senior:'Senior',supervisor:'Supervisor',principal:'Principal'};
+const LVLNAME={intern:'Intern',jr:'Junior',assoc:'Video Editor',ve:'Video Editor',senior:'Senior',supervisor:'Supervisor',principal:'Principal'};
 const band=s=>s<3?'lo':s<4?'mid':'hi';
 const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
 const fmt=x=>x.toFixed(2);
+const doc=document.getElementById('doc');
+const params=new URLSearchParams(location.search);
+const VIEW_KEY=params.get('key')||'';
 
 function distBars(scores){
  const c={1:0,2:0,3:0,4:0,5:0}; scores.forEach(s=>c[s]++);
@@ -117,61 +98,116 @@ function distBars(scores){
  return h+'</div>';
 }
 
-function render(){
- const S=SEED;
- if(S.n<MIN_N){document.getElementById('doc').innerHTML=
-   `<div class="section"><div class="stitle">No responses yet</div><p>No peer responses recorded for this cycle.</p></div>`;return;}
- const allVals=CLUSTERS.flatMap(c=>c[1]);
- const overall=mean(allVals.map(v=>mean(S.values[v])));
- // clusters
+async function fetchWithRetry(url,tries=4,delayMs=700){
+  let e;for(let i=0;i<tries;i++){try{const r=await fetch(url);if(!r.ok&&r.status>=500)throw new Error('HTTP '+r.status);return r;}catch(x){e=x;if(i<tries-1)await new Promise(rs=>setTimeout(rs,delayMs*(i+1)));}}throw e;
+}
+
+function pickerHtml(roster,selSlug,cycle){
+ const opts=roster.map(r=>`<option value="${r.id}" ${r.id===selSlug?'selected':''}>${r.name}</option>`).join('');
+ return `<div class="section print"><div class="stitle">Load a scorecard</div>
+   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+     <div style="flex:1;min-width:180px"><label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Peer</label>
+       <select id="gvTarget" style="width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff"><option value="">— select —</option>${opts}</select></div>
+     <div style="width:130px"><label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Cycle</label>
+       <input id="gvCycle" maxlength="9" value="${cycle}" style="width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff"></div>
+     <button id="gvLoad" class="pbtn" style="padding:10px 18px">Load</button>
+   </div></div>`;
+}
+
+let ROSTER=[];
+async function boot(){
+  doc.innerHTML='<div class="section"><div class="stitle">Loading…</div></div>';
+  try{
+    const cfg=await (await fetchWithRetry(`${WORKER_URL}/config`)).json();
+    ROSTER=cfg.roster.map(r=>({id:r.id,name:r.name,level:r.level}));
+  }catch(e){doc.innerHTML='<div class="section"><div class="stitle" style="color:var(--lo)">Failed to load config</div><p>'+e.message+'</p></div>';return;}
+  const now=new Date();const defCycle='Q'+(Math.floor(now.getMonth()/3)+1)+' '+now.getFullYear();
+  const t=params.get('target')||'',c=params.get('cycle')||defCycle;
+  shell(t,c);
+  if(t)load(t,c);
+}
+function shell(selSlug,cycle){
+  doc.innerHTML=pickerHtml(ROSTER,selSlug,cycle)+'<div id="gvBody"><div class="section"><div class="stitle">Pick a peer + cycle</div><p style="font-size:13px;color:var(--muted)">The pooled scorecard loads here. Nothing is attributed to any rater.</p></div></div>';
+  document.getElementById('gvLoad').onclick=()=>{
+    const s=document.getElementById('gvTarget').value,cy=document.getElementById('gvCycle').value.trim().toUpperCase();
+    if(!s||!cy){alert('Pick a peer and a cycle first.');return;}
+    const u=new URL(location.href);u.searchParams.set('target',s);u.searchParams.set('cycle',cy);history.replaceState(null,'',u);
+    load(s,cy);
+  };
+  document.getElementById('gvCycle').addEventListener('input',e=>{const p=e.target.selectionStart;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(p,p);});
+}
+async function load(slug,cycle){
+  const body=document.getElementById('gvBody');
+  body.innerHTML='<div class="section"><div class="stitle">Loading scorecard…</div></div>';
+  try{
+    const u=`${WORKER_URL}/peer/aggregate?target=${encodeURIComponent(slug)}&cycle=${encodeURIComponent(cycle)}${VIEW_KEY?`&key=${encodeURIComponent(VIEW_KEY)}`:''}`;
+    const r=await fetch(u);const j=await r.json();
+    if(r.status===403){body.innerHTML='<div class="section"><div class="stitle" style="color:var(--lo)">Access key required</div><p style="font-size:13px">Open this page with your ?key= link from the admin.</p></div>';return;}
+    if(!r.ok)throw new Error(j.error||r.status);
+    if(!j.found||!j.n){body.innerHTML=`<div class="section"><div class="stitle">No responses yet</div><p style="font-size:13px;color:var(--muted)">No peer responses recorded for this peer in <b>${cycle}</b>.</p></div>`;return;}
+    render(j,body);
+  }catch(e){body.innerHTML='<div class="section"><div class="stitle" style="color:var(--lo)">Failed to load</div><p style="font-size:13px">'+e.message+'</p></div>';}
+}
+
+function render(S,body){
+ const V={};(S.values||[]).forEach(v=>V[v.name]=v.scores||[]);
+ const known=CLUSTERS.flatMap(c=>c[1]).filter(n=>V[n]&&V[n].length);
+ const extras=(S.values||[]).map(v=>v.name).filter(n=>!CLUSTERS.some(c=>c[1].includes(n)));
+ const allVals=[...known,...extras];
+ if(!allVals.length){body.innerHTML='<div class="section"><div class="stitle">No score data</div></div>';return;}
+ const overall=mean(allVals.map(v=>mean(V[v])));
  let clhtml='';
  CLUSTERS.forEach(([cn,vals])=>{
-   const cm=mean(vals.map(v=>mean(S.values[v])));
-   clhtml+=`<div class="cl"><div class="cn">${cn}</div><div class="cm"><b class="${band(cm)==='lo'?'':''}" style="color:var(--${band(cm)==='hi'?'hi':band(cm)==='mid'?'mid-ink':'lo'})">${fmt(cm)}</b><span>cluster mean</span></div></div>`;
+   const have=vals.filter(v=>V[v]&&V[v].length);if(!have.length)return;
+   const cm=mean(have.map(v=>mean(V[v])));
+   clhtml+=`<div class="cl"><div class="cn">${cn}</div><div class="cm"><b style="color:var(--${band(cm)==='hi'?'hi':band(cm)==='mid'?'mid-ink':'lo'})">${fmt(cm)}</b><span>cluster mean</span></div></div>`;
  });
- // values grouped
  let vhtml='';
  CLUSTERS.forEach(([cn,vals])=>{
+   const have=vals.filter(v=>V[v]&&V[v].length);if(!have.length)return;
    vhtml+=`<div class="clushd" style="grid-column:auto">${cn}</div>`;
-   vals.forEach(v=>{
-     const m=mean(S.values[v]);
-     vhtml+=`<div class="val"><div class="vtop"><span class="vname">${v}</span><span class="vmean ${band(m)}">${fmt(m)}</span></div>${distBars(S.values[v])}</div>`;
-   });
+   have.forEach(v=>{const m=mean(V[v]);
+     vhtml+=`<div class="val"><div class="vtop"><span class="vname">${v}</span><span class="vmean ${band(m)}">${fmt(m)}</span></div>${distBars(V[v])}</div>`;});
  });
- // track tally (senior only)
+ if(extras.length){
+   vhtml+=`<div class="clushd" style="grid-column:auto">Other values</div>`;
+   extras.forEach(v=>{const m=mean(V[v]);vhtml+=`<div class="val"><div class="vtop"><span class="vname">${v}</span><span class="vmean ${band(m)}">${fmt(m)}</span></div>${distBars(V[v])}</div>`;});
+ }
  let trackHtml='';
  if(S.level==='senior' && S.track_reco){
    const t=S.track_reco, tot=(t.mg||0)+(t.ic||0)+(t.unsure||0);
    const row=(cls,lbl,c)=>`<div class="tr"><span class="lbl ${cls}">${lbl}</span><div class="track-bar"><div class="track-fill ${cls}" style="width:${tot?Math.round(c/tot*100):0}%"></div></div><span class="cnt">${c}</span></div>`;
-   const lead = t.mg>=t.ic ? 'Management → Supervisor' : 'IC → Principal';
+   const lead = (t.mg||0)>=(t.ic||0) ? 'Management → Supervisor' : 'IC → Principal';
    trackHtml=`<div class="section"><div class="stitle">Track fit · peers' read</div>
      <div class="track"><div class="q">Which way is this senior growing?</div>
      <div class="g">Aggregated peer recommendations. Developmental signal to inform the track decision — not a verdict.</div>
      <div class="trbars">${row('mg','Management → Supervisor',t.mg||0)}${row('ic','IC → Principal',t.ic||0)}${row('un','Too early to say',t.unsure||0)}</div>
-     <div class="lean">Peers lean <b>${lead}</b> (${Math.max(t.mg||0,t.ic||0)} of ${tot}).</div>
+     ${tot?`<div class="lean">Peers lean <b>${lead}</b> (${Math.max(t.mg||0,t.ic||0)} of ${tot}).</div>`:''}
      </div></div>`;
  }
- const doc=document.getElementById('doc');
- doc.innerHTML=`
+ const li=x=>'<li>'+String(x).replace(/</g,'&lt;')+'</li>';
+ const pooled=(S.pooled_strengths&&S.pooled_strengths.length)||(S.pooled_constructive&&S.pooled_constructive.length)
+   ?`<div class="section"><div class="stitle">Pooled feedback</div>
+    ${S.pooled_strengths&&S.pooled_strengths.length?`<div class="pooled"><div class="who">Strengths</div><ul>${S.pooled_strengths.map(li).join('')}</ul></div>`:''}
+    ${S.pooled_constructive&&S.pooled_constructive.length?`<div class="pooled"><div class="who">To grow</div><ul>${S.pooled_constructive.map(li).join('')}</ul></div>`:''}
+  </div>`:'';
+ body.innerHTML=`
   <div class="head">
     <div><div class="eyebrow">Peer Scorecard · developmental</div>
       <h1>${S.ratee}</h1>
-      <div class="meta"><b>${LVLNAME[S.level]||S.level}</b> · ${S.cycle} · aggregated from <b>${S.n}</b> peer responses</div>
+      <div class="meta"><b>${LVLNAME[S.level]||S.level||'—'}</b> · ${S.cycle} · aggregated from <b>${S.n}</b> peer response${S.n>1?'s':''}</div>
     </div>
     <div class="overall"><div class="medal ${band(overall)}"><div class="lbl">Overall</div>
       <div class="big">${fmt(overall)}</div>
-      <div class="sub">mean of 15 values</div></div></div>
+      <div class="sub">mean of ${allVals.length} values</div></div></div>
   </div>
-  <div class="anon"><div><b>Pooled from all responses.</b> With one response, the report reflects that rating directly; with more than one, scores are averaged into the view below. This is developmental input, not a disciplinary record.</div></div>
+  <div class="anon"><div><b>Pooled from all responses.</b> With one response, the report reflects that rating directly; with more than one, scores are averaged into the view below. Score bars are shuffled so no rater's row can be reconstructed. This is developmental input, not a disciplinary record.</div></div>
   <div class="section"><div class="stitle">Cluster means</div><div class="clusters">${clhtml}</div></div>
   <div class="section"><div class="stitle">By value · mean + how peers rated (1&ndash;5)</div>${vhtml}</div>
   ${trackHtml}
-  <div class="section"><div class="stitle">Pooled feedback</div>
-    <div class="pooled"><div class="who">Strengths</div><ul>${S.pooled_strengths.map(x=>'<li>'+x+'</li>').join('')}</ul></div>
-    <div class="pooled"><div class="who">To grow</div><ul>${S.pooled_constructive.map(x=>'<li>'+x+'</li>').join('')}</ul></div>
-  </div>
-  <div class="foot">Peer Scorecard · comments pooled when n&gt;1 · Sample data shown.</div>`;
+  ${pooled}
+  <div class="foot">Peer Scorecard · live pooled data · comments pooled when n&gt;1.</div>`;
 }
-render();
+boot();
 </script>
 </body></html>
