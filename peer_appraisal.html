@@ -88,7 +88,7 @@
     <p class="sdesc">Pick the peer. Their current level sets the &ldquo;now&rdquo; and &ldquo;next&rdquo; anchors on each value.</p>
     <div class="row2">
       <div><label class="f">Peer (target)</label><select id="target"><option value="">&mdash; select &mdash;</option></select><div id="tlvl"></div></div>
-      <div><label class="f">Cycle</label><input type="text" id="cycle" oninput="this.value=this.value.toUpperCase()"/></div>
+      <div><label class="f">Cycle</label><input type="text" id="cycle" maxlength="9"/></div>
     </div>
   </div>
 
@@ -148,7 +148,7 @@ async function fetchWithRetry(url,tries=4,delayMs=700){
 async function loadConfig(){
   const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
-  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
+  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level, r.id]);
   const clusterOrder=[], clusterMap={};
   cfg.peer_rubric.forEach(row=>{
     if(!clusterMap[row.cluster]){clusterMap[row.cluster]={name:row.cluster,values:[]};clusterOrder.push(row.cluster);}
@@ -162,7 +162,7 @@ async function loadConfig(){
   ALLVALUES=CLUSTERS.flatMap(c=>c.values.map(v=>v.label));
 }
 const RATER_TOKEN=new URLSearchParams(location.search).get('t')||null;
-const state={ratings:{},target:'',level:'',cycle:'',track_reco:null};
+const state={ratings:{},target:'',target_id:'',level:'',cycle:'',track_reco:null};
 let STEPS=['0','written','review'];
 let cur=0;
 
@@ -190,11 +190,19 @@ function buildClusterCards(){
 }
 
 const tgt=document.getElementById('target');
-tgt.onchange=function(){var o=tgt.selectedOptions[0];state.target=tgt.value;state.level=o?o.dataset.lvl:'';
+tgt.onchange=function(){var o=tgt.selectedOptions[0];var changed=state.target&&state.target!==tgt.value;state.target=tgt.value;state.target_id=o?o.dataset.slug:'';state.level=o?o.dataset.lvl:'';
+  if(changed)resetRatings(); // never carry one peer's ratings into another's form
   document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span>':'';paintAnchors();validate();};
+function resetRatings(){
+  state.ratings={};state.track_reco=null;
+  document.getElementById('key_strength').value='';document.getElementById('constructive').value='';
+  document.getElementById('confirmAnon').checked=false;
+  document.querySelectorAll('.sc.sel').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
+  document.querySelectorAll('.trk-opt.sel').forEach(function(x){x.classList.remove('sel');});
+}
 var _cy=document.getElementById('cycle');
 var _now=new Date();var _q=Math.floor(_now.getMonth()/3)+1;_cy.value='Q'+_q+' '+_now.getFullYear();state.cycle=_cy.value;
-_cy.oninput=function(e){state.cycle=e.target.value;validate();};
+_cy.oninput=function(e){var p=e.target.selectionStart;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(p,p);state.cycle=e.target.value;validate();};
 
 function paintAnchors(){
   var lvl=state.level,idx=LADDER.indexOf(lvl),nextLvl=(idx>=0&&idx<LADDER.length-1)?LADDER[idx+1]:null;
@@ -250,6 +258,7 @@ function canLeave(i){
     if(missing){alert('Rate "'+missing.label+'" before continuing.');return false;}
   }
   if(STEPS[i]==='written'){
+    if(state.level==='senior'&&!state.track_reco){alert('Pick a track read for this senior (IC / Management / Too early to say).');return false;}
     if(!document.getElementById('key_strength').value.trim()){alert('Fill in "key strength" before continuing.');return false;}
     if(!document.getElementById('constructive').value.trim()){alert('Fill in the constructive feedback field before continuing.');return false;}
   }
@@ -259,7 +268,8 @@ function validate(){
   document.getElementById('nextBtn').disabled=STEPS[cur]==='0'&&(!state.target||!state.cycle);
   var done=ALLVALUES.every(function(v){return state.ratings[v]!=null;});
   var conf=document.getElementById('confirmAnon').checked;
-  document.getElementById('submitBtn').disabled=!(done&&conf);
+  var trkOk=state.level!=='senior'||!!state.track_reco;
+  document.getElementById('submitBtn').disabled=!(done&&conf&&trkOk);
 }
 document.getElementById('confirmAnon').addEventListener('change',validate);
 
@@ -270,6 +280,12 @@ function buildReview(){
     cl.values.forEach(function(v){var s=state.ratings[v.label];
       h+='<div class="revrow"><span>'+v.label+'</span><b style="color:'+(s?(s<=2?'var(--lo)':s===3?'var(--mid-ink)':'var(--hi)'):'var(--muted)')+'">'+(s?(s+' · '+SCALEFULL[s]):'\u2014 not rated')+'</b></div>';});
   });
+  var TRK={ic:'IC → Principal',mg:'Management → Supervisor',unsure:'Too early to say'};
+  if(state.level==='senior')h+='<div class="revrow"><span>Track read</span><b>'+(state.track_reco?TRK[state.track_reco]:'\u2014 not picked')+'</b></div>';
+  var ks=document.getElementById('key_strength').value.trim(),cn=document.getElementById('constructive').value.trim();
+  var clip=function(t){return t.length>140?t.slice(0,140)+'\u2026':t;};
+  if(ks)h+='<div class="revrow" style="align-items:flex-start"><span style="flex:0 0 110px">Strength</span><span style="text-align:right;color:#374151">'+clip(ks)+'</span></div>';
+  if(cn)h+='<div class="revrow" style="align-items:flex-start"><span style="flex:0 0 110px">Constructive</span><span style="text-align:right;color:#374151">'+clip(cn)+'</span></div>';
   box.innerHTML=h;
   var vals=ALLVALUES.map(function(v){return state.ratings[v];}).filter(function(x){return x!=null;});
   var ov=vals.length?(vals.reduce(function(a,b){return a+b;},0)/vals.length):null;
@@ -280,21 +296,44 @@ function buildReview(){
 
 function payload(){
   var vals=ALLVALUES.map(function(v){return state.ratings[v];}).filter(function(x){return x!=null;});
-  return {cycle:state.cycle,target:state.target,target_level:state.level,ratings:Object.assign({},state.ratings),
+  return {cycle:state.cycle,target:state.target,target_id:state.target_id||null,target_level:state.level,ratings:Object.assign({},state.ratings),
     key_strength:document.getElementById('key_strength').value.trim(),
     constructive:document.getElementById('constructive').value.trim(),
     overall:vals.length?+(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(2):null,
     track_reco:state.level==='senior'?state.track_reco:null,_token:RATER_TOKEN};
 }
+let SUBMITTING=false;
 async function submitForm(){
-  const btn=document.querySelector('[onclick="submitForm()"]')||document.activeElement;
+  if(SUBMITTING)return;
+  const btn=document.getElementById('submitBtn');
+  SUBMITTING=true;btn.disabled=true;btn.textContent='Submitting\u2026';
   try{
     const r=await fetch(`${WORKER_URL}/submit/peer`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload())});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||r.status);
-    if(j.aggregated){ alert(j.n===1?`Submitted. Filed directly to ClickUp task ${j.clickup_task_id} (this is the only response so far).`:`Submitted. Peer Scorecard updated with all ${j.n} responses and attached to ClickUp task ${j.clickup_task_id}.`); }
-    else { alert(`Submitted.`); }
-  } catch(e){ alert('Failed: '+e.message); }
+    showDone(j);
+  } catch(e){
+    SUBMITTING=false;btn.disabled=false;btn.textContent='Preview & submit';
+    alert('Failed: '+e.message);
+  }
+}
+function showDone(j){
+  var ratedName=state.target,ratedCycle=state.cycle;
+  document.querySelectorAll('.card.step').forEach(function(s){s.classList.remove('on');});
+  document.querySelector('.nav').style.display='none';
+  var d=document.createElement('div');d.className='card';d.id='doneCard';d.style.textAlign='center';d.style.padding='34px 24px';
+  d.innerHTML='<div style="font-size:38px">\u2713</div><p class="stitle" style="margin-top:8px">Appraisal submitted</p>'
+    +'<p class="sdesc" style="margin-bottom:18px">Your rating for <b>'+ratedName+'</b> ('+ratedCycle+') is pooled anonymously'+(j.aggregated?' \u2014 the scorecard now reflects '+j.n+' rater'+(j.n>1?'s':''):'')+'.</p>'
+    +'<button class="btn primary" id="rateAnother" style="margin-right:8px">Rate another peer</button>'
+    +'<button class="btn" onclick="window.close()">Close</button>';
+  document.querySelector('.wrap').appendChild(d);
+  document.getElementById('rateAnother').onclick=function(){
+    d.remove();document.querySelector('.nav').style.display='';
+    resetRatings();
+    tgt.value='';state.target='';state.target_id='';state.level='';document.getElementById('tlvl').innerHTML='';
+    SUBMITTING=false;var b=document.getElementById('submitBtn');b.disabled=true;b.textContent='Preview & submit';
+    cur=0;paintAnchors();paint();window.scrollTo(0,0);
+  };
 }
 document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});
 loadConfig().then(()=>{
@@ -305,7 +344,7 @@ loadConfig().then(()=>{
       '<p style="color:#6b7280">Check ClickUp for a task assigned to you with your link, or ask your admin.</p></div>';
     return;
   }
-  STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();ROSTER.forEach(function(p){var o=document.createElement('option');o.value=p[0];o.dataset.lvl=p[1];o.textContent=p[0];tgt.appendChild(o);});paint();
+  STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();ROSTER.forEach(function(p){var o=document.createElement('option');o.value=p[0];o.dataset.lvl=p[1];o.dataset.slug=p[2]||'';o.textContent=p[0];tgt.appendChild(o);});paint();
 }).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
 </script>
 </body>
