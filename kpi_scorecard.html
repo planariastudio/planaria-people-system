@@ -150,309 +150,547 @@
   body.char-bold .btn.primary{box-shadow:0 4px 16px color-mix(in srgb,var(--kpi) 42%,transparent)}
   @media print{.tweaks{display:none!important}}
   @media(max-width:520px){.tweaks{top:auto;bottom:74px;right:12px}.tw-panel{bottom:calc(100% + 8px);top:auto}}
+
+  /* ===== multi-stage additions ===== */
+  .gate{max-width:640px;margin:8vh auto 0;text-align:center}
+  .gate h1{font-size:26px;letter-spacing:-.02em;margin:0 0 4px}
+  .gate p{color:var(--muted);margin:0 0 26px}
+  .gate .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left}
+  .gate .rc{border:1px solid var(--line);border-radius:14px;padding:20px 18px;background:var(--card);cursor:pointer;transition:.14s}
+  .gate .rc:hover{border-color:var(--accent);box-shadow:0 8px 26px rgba(23,25,29,.08);transform:translateY(-1px)}
+  .gate .rc .ico{width:38px;height:38px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;margin-bottom:12px}
+  .gate .rc h3{margin:0 0 4px;font-size:16px}
+  .gate .rc span{font-size:13px;color:var(--muted);line-height:1.45}
+  .rflag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);background:var(--accent-soft);padding:4px 9px;border-radius:99px;margin-left:10px;vertical-align:middle}
+  .rflag button{border:0;background:none;color:var(--accent);font:inherit;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0}
+  .idtag{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}.idtag b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .note{border:1px solid var(--line);background:var(--accent-soft);border-radius:10px;padding:11px 14px;font-size:13px;margin:0 0 14px;line-height:1.5}
+  .note.warn{background:#fdf3e8;border-color:#f4d9b0;color:#7c4a06}
+  .note b{color:var(--ink)}
+  /* read-only editor reference shown to supervisor */
+  .panel.ref{background:var(--selfbg);opacity:1}
+  .panel.ref .ph{color:var(--self)}
+  .ro{font-size:13px;line-height:1.5}
+  .ro .rr{padding:6px 0;border-top:1px solid var(--line2)}.ro .rr:first-child{border-top:0}
+  .ro .rk{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700;margin-bottom:2px}
+  .rchip{display:inline-block;min-width:24px;text-align:center;color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-variant-numeric:tabular-nums}
+  .rchip.b12{background:var(--low)}.rchip.b3{background:var(--mid);color:#3d2c00}.rchip.b45{background:var(--high)}.rchip.na{background:var(--faint)}
+  .seg.ro button{cursor:default}
+  .suplist{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+  .supchip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;border:1px solid var(--line);border-radius:99px;padding:5px 11px;background:#fff}
+  .supchip .sv{color:#fff;border-radius:5px;padding:1px 7px;font-weight:700;font-size:11px}
+  .supchip .sv.b12{background:var(--low)}.supchip .sv.b3{background:var(--mid);color:#3d2c00}.supchip .sv.b45{background:var(--high)}
+  .supchip.me{border-color:var(--accent);background:var(--accent-soft)}
+  .done{max-width:600px;margin:6vh auto 0;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:34px 28px}
+  .done .big{font-size:40px}.done h2{margin:10px 0 6px;font-size:22px}
+  .done p{color:var(--muted);margin:0 0 18px}
+  .linkbox{display:flex;gap:8px;margin:16px 0}
+  .linkbox input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;background:var(--line2)}
 </style>
 </head>
 <body>
-<div class="tweaks noprint" id="tweaks">
-  <button class="tw-toggle" id="twToggle" aria-expanded="false" aria-controls="twPanel"><span class="dot"></span>Tweaks</button>
-  <div class="tw-panel" id="twPanel" role="dialog" aria-label="Appearance tweaks" hidden>
-    <div class="tw-hd"><span>Appearance</span><button type="button" id="twReset">Reset</button></div>
-    <div class="tw-row"><span class="tw-lab">Density</span>
-      <div class="tw-seg" data-group="density">
-        <button type="button" data-v="compact">Compact</button>
-        <button type="button" data-v="cozy">Cozy</button>
-        <button type="button" data-v="roomy">Roomy</button>
-      </div></div>
-    <div class="tw-row"><span class="tw-lab">Accent</span>
-      <div class="tw-swatches" id="twAccent"></div></div>
-    <div class="tw-row"><span class="tw-lab">Character</span>
-      <div class="tw-seg" data-group="character">
-        <button type="button" data-v="calm">Calm</button>
-        <button type="button" data-v="sharp">Sharp</button>
-        <button type="button" data-v="bold">Bold</button>
-      </div></div>
-  </div>
-</div>
-<div class="wrap">
 
-<div id="form">
-  <div class="top"><h1>KPI Scorecard</h1><a class="reflink" href="people_system_reference.html#kpi" target="_blank" rel="noopener">View full KPI Rubric ↗</a></div>
-  <div class="ctx">
-    <div class="f"><label>Editor</label><select id="employee"><option value="">Select…</option></select></div>
-    <div class="f"><label>Level</label><div class="auto" id="levelAuto">—</div></div>
-    <div class="f"><label>Supervisor</label>
-      <div class="supbox"><button class="supbtn empty" id="supBtn" type="button">Select…</button>
-        <div class="supmenu" id="supMenu">
-          <label><input type="checkbox" value="Rashy"> Rashy</label>
-          <label><input type="checkbox" value="Joshua"> Joshua</label>
-          <div class="add"><input id="supAdd" placeholder="Add another"><button type="button" id="supAddBtn">Add</button></div>
-        </div></div></div>
-    <div class="f"><label>Quarter</label><input id="quarter" placeholder="Q3 2026" maxlength="9"></div>
-  </div>
-  <div id="ctxErr" class="err" hidden>Select an editor to begin — the level bar and targets load from their level.</div>
-  <div class="prog"><div class="bar" role="progressbar" aria-label="Scorecard progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><div class="fill" id="fill" style="width:0%"></div></div><div class="lbl" id="progLbl">—</div></div>
-  <div id="stepHost"></div>
+<div class="wrap">
+  <div class="top"><h1>KPI Scorecard</h1></div>
+  <div id="ctxHost"></div>
+  <div id="ctxErr" class="err" hidden>Select an editor to begin.</div>
+  <div class="prog" id="progWrap"><div class="bar" role="progressbar" aria-label="Scorecard progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><div class="fill" id="fill" style="width:0%"></div></div><div class="lbl" id="progLbl">—</div></div>
+  <div id="stageHost"></div>
   <div id="stepErr" class="err" hidden style="margin-top:10px"></div>
 </div>
-
-<div id="preview">
-  <div class="pvbar noprint">
-    <button class="btn" id="pvBack">← Back</button>
-    <button class="btn" id="pvPrint">Save as PDF</button>
-    <button class="btn primary" id="pvSubmit">File to ClickUp</button>
-  </div>
-  <div id="pvBody"></div>
-</div>
-</div>
-
-<div class="nav noprint" id="navbar"><div class="inner">
+<div class="nav noprint" id="navbar" style="display:none"><div class="inner" id="navInner">
   <button class="btn" id="btnBack" style="visibility:hidden">← Back</button>
   <div class="spacer"></div><span class="live" id="liveScore"></span>
   <button class="btn primary" id="btnNext">Next →</button>
 </div></div>
 
 <script>
-/* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
+
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
-let ROSTER=[], LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], KPI=[];
+const $=id=>document.getElementById(id);
+const LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"};
+const LK=["intern","jr","ve","senior","spv","principal"];
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
+let ROSTER=[], KPI=[], SUPERVISORS=[], CONFIG_VERSION=null;
 function bulletsToLine(x){return Array.isArray(x)?x.join(' '):(x||'');}
-async function fetchWithRetry(url,tries=4,delayMs=700){
-  let lastErr;
-  for(let i=0;i<tries;i++){
-    try{
-      const res=await fetch(url);
-      if(!res.ok) throw new Error('config fetch failed: '+res.status);
-      return res;
-    }catch(e){lastErr=e; if(i<tries-1) await new Promise(r=>setTimeout(r,delayMs*(i+1)));}
-  }
-  throw lastErr;
-}
+async function fetchWithRetry(url,opt,tries=4,delayMs=700){let e;for(let i=0;i<tries;i++){try{const r=await fetch(url,opt);if(!r.ok&&r.status>=500)throw new Error('HTTP '+r.status);return r;}catch(x){e=x;if(i<tries-1)await new Promise(r=>setTimeout(r,delayMs*(i+1)));}}throw e;}
 async function loadConfig(){
   const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
-  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
-  const catOrder=[], catMap={};
+  ROSTER=cfg.roster.map(r=>[r.name,(LVL_FROM_DB[r.level]||r.level),r.id]);
+  const order=[],map={};
   cfg.kpi_rubric.forEach(row=>{
-    if(!catMap[row.category]){catMap[row.category]={cat:row.category,metrics:[]};catOrder.push(row.category);}
-    const lv=row.levels;
-    catMap[row.category].metrics.push([row.metric,[
-      bulletsToLine(lv.intern), bulletsToLine(lv.jr), bulletsToLine(lv.assoc),
-      bulletsToLine(lv.senior), bulletsToLine(lv.supervisor), bulletsToLine(lv.principal)
-    ]]);
+    if(!map[row.category]){map[row.category]={cat:row.category,metrics:[]};order.push(row.category);}
+    const lv=row.levels||{};
+    map[row.category].metrics.push([row.metric,[bulletsToLine(lv.intern),bulletsToLine(lv.jr),bulletsToLine(lv.assoc),bulletsToLine(lv.senior),bulletsToLine(lv.supervisor),bulletsToLine(lv.principal)]]);
   });
-  KPI=catOrder.map(c=>catMap[c]);
+  KPI=order.map(c=>map[c]);
+  const sl=(cfg.lists||[]).find(l=>l.key==='supervisors');
+  SUPERVISORS=sl&&Array.isArray(sl.value)?sl.value:['Rashy','Joshua'];
+  CONFIG_VERSION=(cfg.lists||[]).find(l=>l.key==='version')?.value||null;
 }
 
+/* ===== shared row labels ===== */
 const EDITOR_ROWS=["What went well this quarter","What was challenging","What do you want to improve next quarter"];
 const SPV_ROWS=["Strengths","Areas of improvement","Trajectory & recommendation"];
 const EGUIDE={"What went well this quarter":"Name projects or moments, not adjectives.","What was challenging":"Be honest — what slowed you or was hard.","What do you want to improve next quarter":"Should tie back to your focus areas above."};
 const SGUIDE={"Strengths":"Where this editor is strongest, with evidence.","Areas of improvement":"Concrete gaps, framed as growth.","Trajectory & recommendation":"Direction, pace, and your call — promote-track, steady, or needs support."};
 
-const S={self:{},selfNote:{},actual:{},spv:{},spvNote:{},supers:[],focus:[{area:"",why:"",action:"",measure:"",priority:""},{area:"",why:"",action:"",measure:"",priority:""}],sum:{}};
-let curLevel="",stepIdx=0;
-let TOTAL=KPI.length+2;
+/* ===== state =====
+   STAGE: 'gate' | 'editor' | 'supervisor'
+   ED = editor-side snapshot (own input in editor stage, read-only in supervisor stage)
+   SP = this supervisor's own input                                                     */
+let STAGE='gate', stepIdx=0, curLevel='', KPICASE=null, caseId='', loadedFromLink=false, mySupName='';
+const ED={self:{},actual:{},selfNote:{},focus:[{area:'',why:''},{area:'',why:''}],sum:{},cats:[],targets:{},level:'',editor:'',quarter:''};
+const SP={spv:{},spvNote:{},foc:[],sum:{}};
 
-const empSel=document.getElementById('employee');
-empSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===empSel.value);curLevel=r?r[1]:"";document.getElementById('levelAuto').textContent=curLevel?LEVEL_LABEL[curLevel]:"—";render();});
+function BAND(v){if(v==null)return'na';if(v<=2.49)return'b12';if(v<3.5)return'b3';return'b45';}
+const fmt=v=>v==null?'—':(+v).toFixed(2);
+function levelIdx(){return LK.indexOf(curLevel);}
 
-const supBtn=document.getElementById('supBtn'),supMenu=document.getElementById('supMenu');
-supBtn.addEventListener('click',()=>supMenu.classList.toggle('open'));
-document.addEventListener('click',e=>{if(!e.target.closest('.supbox'))supMenu.classList.remove('open');});
-supMenu.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',syncSupers));
-document.getElementById('supAddBtn').addEventListener('click',()=>{const v=document.getElementById('supAdd').value.trim();if(!v)return;const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${v}" checked> ${v}`;l.querySelector('input').addEventListener('change',syncSupers);supMenu.querySelector('.add').before(l);document.getElementById('supAdd').value='';syncSupers();});
-function syncSupers(){S.supers=[...supMenu.querySelectorAll('input:checked')].map(c=>c.value);supBtn.textContent=S.supers.length?S.supers.join(' & '):'Select…';supBtn.classList.toggle('empty',!S.supers.length);}
-const qEl=document.getElementById('quarter');
-qEl.addEventListener('input',()=>{const p=qEl.selectionStart;qEl.value=qEl.value.toUpperCase();qEl.setSelectionRange(p,p);});
+/* ===== boot ===== */
+loadConfig().then(()=>{
+  const params=new URLSearchParams(location.search);
+  caseId=params.get('kpi')||'';
+  const wanted=(params.get('role')||'').toLowerCase();
+  if(caseId){ loadedFromLink=true; STAGE='supervisor'; loadCase(caseId).then(startSupervisor); return; }
+  if(wanted==='editor'){enterEditor();return;}
+  if(wanted==='supervisor'){enterSupervisor();return;}
+  renderGate();
+}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
 
-function BAND(v){if(v<=2.49)return'b12';if(v<3.5)return'b3';return'b45';}
+/* ===== ROLE GATE ===== */
+function renderGate(){
+  hideNav();
+  $('stageHost').innerHTML=`<div class="gate">
+    <h1>KPI Scorecard</h1>
+    <p>Choose your role. The editor fills self-scores once and locks them; supervisors then score independently and file the result.</p>
+    <div class="cards">
+      <div class="rc" id="gEditor"><div class="ico">E</div><h3>I'm the editor</h3><span>Rate yourself across the rubric and set your own growth focus. Locks when you're done.</span></div>
+      <div class="rc" id="gSpv"><div class="ico">S</div><h3>I'm a supervisor</h3><span>Score an editor whose self-review is locked. Up to 3 supervisors; any one can file the result.</span></div>
+    </div></div>`;
+  $('gEditor').onclick=enterEditor;
+  $('gSpv').onclick=enterSupervisor;
+}
+function enterEditor(){STAGE='editor';stepIdx=0;buildCtx('editor');showNav();render();}
+function enterSupervisor(){STAGE='supervisor';stepIdx=0;buildCtx('supervisor');showNav();render();}
+
+/* ===== CONTEXT BAR (differs by stage) ===== */
+function buildCtx(stage){
+  const roster=ROSTER.map(([n])=>`<option value="${n}">${n}</option>`).join('');
+  if(stage==='editor'){
+    $('ctxHost').innerHTML=`<div class="rflag">Editor stage <button type="button" id="switchRole">switch</button></div>
+      <div class="ctx">
+        <div class="f"><label>Your name</label><select id="employee"><option value="">Select…</option>${roster}</select></div>
+        <div class="f"><label>Level</label><div class="auto" id="levelAuto">—</div></div>
+        <div class="f"><label>Quarter</label><input id="quarter" placeholder="Q3 2026" maxlength="9"></div>
+        <div class="f"><label>Case ID</label><div class="auto" id="idAuto">—</div></div>
+      </div>`;
+  }else{
+    const sup=SUPERVISORS.map(s=>`<option value="${s}">${s}</option>`).join('');
+    $('ctxHost').innerHTML=`<div class="rflag">Supervisor stage <button type="button" id="switchRole">switch</button></div>
+      <div class="ctx" style="grid-template-columns:1.2fr .8fr 1.1fr 1fr">
+        <div class="f"><label>Editor</label><select id="employee"${loadedFromLink?' disabled':''}><option value="">Select…</option>${roster}</select></div>
+        <div class="f"><label>Quarter</label><input id="quarter" placeholder="Q3 2026" maxlength="9"${loadedFromLink?' disabled':''}></div>
+        <div class="f"><label>Case</label><div class="auto" id="idAuto">—</div></div>
+        <div class="f"><label>Scoring as</label><select id="supName"><option value="">Select…</option>${sup}</select></div>
+      </div>`;
+    $('supName').addEventListener('change',()=>{mySupName=$('supName').value;});
+  }
+  const sr=$('switchRole'); if(sr) sr.onclick=()=>{resetAll();renderGate();hideNav();};
+  const emp=$('employee');
+  emp.addEventListener('change',()=>{
+    const r=ROSTER.find(x=>x[0]===emp.value);curLevel=r?r[1]:'';
+    if($('levelAuto'))$('levelAuto').textContent=curLevel?LEVEL_LABEL[curLevel]:'—';
+    $('ctxErr').hidden=true;emp.classList.remove('bad');
+    if(stage==='editor'){stepIdx=0;resetEditorScores();maybeEditorId();render();}
+    else{stepIdx=0;findOpenCaseForSpv();}
+  });
+  const q=$('quarter');
+  q.addEventListener('input',()=>{const p=q.selectionStart;q.value=q.value.toUpperCase();q.setSelectionRange(p,p);});
+  q.addEventListener('change',()=>{ if(stage==='editor')maybeEditorId(); else{stepIdx=0;findOpenCaseForSpv();} });
+}
+function slugFor(name){const r=ROSTER.find(x=>x[0]===name);return r?r[2]:'';}
+
+/* ===== EDITOR: auto-id ===== */
+async function maybeEditorId(){
+  if(STAGE!=='editor')return;
+  const emp=$('employee').value,q=$('quarter').value.trim();
+  if(!emp||!q){$('idAuto').textContent='—';caseId='';setNote('');return;}
+  try{
+    const[nr,or]=await Promise.all([
+      fetch(`${WORKER_URL}/kpi/next-id?quarter=${encodeURIComponent(q)}&editor=${encodeURIComponent(slugFor(emp))}`),
+      fetch(`${WORKER_URL}/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`)
+    ]);
+    const j=await nr.json();caseId=j.id||'';$('idAuto').textContent=caseId||'—';
+    const oj=await or.json();
+    if(oj.open&&oj.editor_locked){setNote(`You already locked <b>${oj.id}</b> for ${q} — supervisors are scoring it. Continuing here starts a <b>second</b> case (${caseId}). Only do this deliberately.`,'warn');}
+    else setNote('');
+  }catch(e){$('idAuto').textContent='—';}
+}
+function resetEditorScores(){ED.self={};ED.actual={};ED.selfNote={};ED.focus=[{area:'',why:''},{area:'',why:''}];ED.sum={};}
+
+/* ===== SUPERVISOR: locate the open locked case via /kpi/open ===== */
+async function findOpenCaseForSpv(){
+  if(STAGE!=='supervisor'||loadedFromLink)return;
+  const emp=$('employee').value,q=$('quarter').value.trim();
+  if(!emp||!q){$('idAuto').textContent='—';caseId='';KPICASE=null;render();return;}
+  try{
+    const or=await fetch(`${WORKER_URL}/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`);
+    const oj=await or.json();
+    setNote('');
+    if(!oj.open){
+      if(oj.last&&oj.last.finalized){setNote(`${oj.last.id} is already filed (official KPI <b>${oj.last.official_kpi}</b>) for ${q}. Nothing left to score — start a new quarter's cycle from the editor side.`,'warn');}
+      else{setNote(`No self-review found for <b>${emp}</b> in <b>${q}</b>. The editor must complete and lock their part first.`,'warn');}
+      $('idAuto').textContent='—';caseId='';KPICASE=null;render();return;
+    }
+    if(!oj.editor_locked){setNote(`<b>${emp}</b> started ${oj.id} but hasn't locked their self-review yet. Ask them to finish first.`,'warn');$('idAuto').textContent='—';caseId='';KPICASE=null;render();return;}
+    const gr=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(oj.id)}`);const gj=await gr.json();
+    if(!gj.found){setNote(`Case ${oj.id} could not be loaded — try again.`,'warn');return;}
+    KPICASE=gj.case;caseId=oj.id;$('idAuto').textContent=caseId;
+    hydrateFromCase(KPICASE);render();
+  }catch(e){setNote('Lookup failed: '+e.message,'warn');}
+}
+function setNote(html,kind){let n=$('ctxNote');if(!n){n=document.createElement('div');n.id='ctxNote';n.className='note';$('ctxHost').appendChild(n);}if(!html){n.hidden=true;return;}n.hidden=false;n.className='note'+(kind==='warn'?' warn':'');n.innerHTML=html;}
+
+async function loadCase(id){
+  try{const r=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(id)}`);const j=await r.json();
+    if(j.found)KPICASE=j.case;}catch(e){}
+}
+function startSupervisor(){
+  buildCtx('supervisor');showNav();
+  if(!KPICASE){setNote(`Case <b>${caseId}</b> wasn't found.`,'warn');render();return;}
+  if(KPICASE.finalized){setNote(`${KPICASE.id} is already filed (official KPI <b>${KPICASE.official_kpi}</b>).`,'warn');}
+  hydrateFromCase(KPICASE);
+  $('employee').value=KPICASE.editor_name;$('quarter').value=KPICASE.quarter;$('idAuto').textContent=KPICASE.id;
+  render();
+}
+/* map stored editor_data into ED (read-only reference for the supervisor) */
+function hydrateFromCase(c){
+  const d=c.editor_data||{};
+  ED.self=d.self||{};ED.actual=d.actual||{};ED.selfNote=d.selfNote||{};
+  ED.focus=(d.focus&&d.focus.length)?d.focus:[{area:'',why:''}];
+  ED.sum=d.sum||{};ED.targets=d.targets||{};ED.cats=d.cats||[];ED.level=c.level;ED.editor=c.editor_name;ED.quarter=c.quarter;
+  curLevel=c.level;
+  // align supervisor focus rows to editor focus count
+  SP.foc=ED.focus.map((_,i)=>SP.foc[i]||{action:'',measure:'',priority:''});
+  // if config changed, fall back to live KPI names when snapshot absent
+  if(!ED.cats.length)ED.cats=KPI.map(c=>({name:c.cat,metrics:c.metrics.map(m=>({name:m[0],target:''}))}));
+}
+
+/* ===== progress + step engine ===== */
+const CATS=()=>STAGE==='supervisor'?ED.cats:KPI.map(c=>({name:c.cat,metrics:c.metrics.map((m,mi)=>({name:m[0],mi}))}));
+function TOTAL(){return CATS().length+2;}
+function catAvg(ci,who){const cats=CATS();const v=cats[ci].metrics.map((_,mi)=>who==='self'?ED.self[`${ci}-${mi}`]:SP.spv[`${ci}-${mi}`]).filter(x=>x);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
+function overall(who){const cats=CATS();const c=cats.map((_,ci)=>catAvg(ci,who)).filter(x=>x!=null);return c.length?+(c.reduce((a,b)=>a+b,0)/c.length).toFixed(2):null;}
+
+function render(){
+  if(STAGE==='supervisor'&&!KPICASE){
+    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Supervisor</div><h2>Pick an editor & quarter</h2><p class="hint">Choose the editor and quarter above. Their self-review must be locked before you can score. The matching case loads here automatically.</p></div>`;
+    $('fill').style.width='0%';$('progLbl').textContent='—';$('navInner').innerHTML='<button class="btn" id="btnBack" style="visibility:hidden">← Back</button><div class="spacer"></div>';
+    return;
+  }
+  const total=TOTAL();
+  const pct=Math.round(stepIdx/(total-1)*100);
+  $('fill').style.width=pct+'%';$('progBar').setAttribute('aria-valuenow',pct);
+  const cats=CATS();
+  if(stepIdx<cats.length){renderCat(stepIdx);$('progLbl').textContent=`${stepIdx+1} / ${total} · ${cats[stepIdx].name}`;}
+  else if(stepIdx===cats.length){renderReflect();$('progLbl').textContent=`${stepIdx+1} / ${total} · Reflection & focus`;}
+  else{renderReview();$('progLbl').textContent=`${total} / ${total} · Review & ${STAGE==='editor'?'lock':'file'}`;}
+  $('stepErr').hidden=true;
+  renderFooter();
+}
+
+function segEditable(key,who){let b='';for(let v=1;v<=5;v++){const val=(who==='self'?ED.self[key]:SP.spv[key]);const sel=val===v;const on=sel?`on ${BAND(v)}`:'';b+=`<button class="${on}" data-k="${key}" data-w="${who}" data-v="${v}" aria-pressed="${sel}">${v}</button>`;}return `<div class="seg" role="group" aria-label="1 to 5 rating">${b}</div>`;}
+function segRO(val){let b='';for(let v=1;v<=5;v++){const sel=val===v;const on=sel?`on ${BAND(v)}`:'';b+=`<button class="${on}" disabled tabindex="-1">${v}</button>`;}return `<div class="seg ro" aria-label="editor self rating">${b}</div>`;}
+const rchip=v=>v==null?'<span class="rchip na">—</span>':`<span class="rchip ${BAND(v)}">${v}</span>`;
+
+function renderCat(ci){
+  const cats=CATS(),c=cats[ci],li=levelIdx();
+  let h=`<div class="step"><div class="eyebrow">Category ${ci+1} of ${cats.length}</div><h2>${c.name}</h2>
+    <div class="scalekey"><span><b>1</b> Unsatisfactory</span><span><b>2</b> Needs work</span><span><b>3</b> Fair</span><span><b>4</b> Good</span><span><b>5</b> Excellent</span></div>`;
+  c.metrics.forEach((m,mi)=>{
+    const key=`${ci}-${mi}`;
+    const target = STAGE==='supervisor' ? (ED.targets[key]||m.target||'') : (li>=0?KPI[ci].metrics[mi][1][li]:'Select your level to load targets');
+    h+=`<div class="m"><div class="mn">${m.name}</div>
+      <div class="tg"><b>Target · ${(STAGE==='supervisor'?LEVEL_LABEL[ED.level]:(li>=0?LEVEL_LABEL[curLevel]:'—'))||'—'}</b><br>${target||'—'}</div>
+      <div class="panels">`;
+    if(STAGE==='editor'){
+      h+=`<div class="panel self"><div class="ph">Editor (self)</div>
+        <div class="fld"><label>Your actual — what you did this quarter</label><textarea data-a="${key}" placeholder="Concrete: projects, numbers, deliverables">${ED.actual[key]||''}</textarea></div>
+        <div class="fld"><label>Your rating</label>${segEditable(key,'self')}</div>
+        <div class="fld"><label>Your notes</label><textarea data-sn="${key}" placeholder="Context for your score">${ED.selfNote[key]||''}</textarea></div>
+      </div>
+      <div class="panel spv" style="opacity:.55"><div class="ph">Supervisor</div><p class="ro" style="color:var(--faint);margin:4px 0 0">Filled independently by your supervisor after you lock.</p></div>`;
+    }else{
+      h+=`<div class="panel ref"><div class="ph">Editor (self) · reference</div>
+        <div class="ro">
+          <div class="rr"><div class="rk">Self rating</div>${segRO(ED.self[key])}</div>
+          ${ED.actual[key]?`<div class="rr"><div class="rk">Their actual</div>${ED.actual[key]}</div>`:''}
+          ${ED.selfNote[key]?`<div class="rr"><div class="rk">Their notes</div>${ED.selfNote[key]}</div>`:''}
+        </div></div>
+      <div class="panel spv"><div class="ph">Supervisor — ${mySupName||'your'} score</div>
+        <div class="fld"><label>Supervisor rating</label>${segEditable(key,'spv')}</div>
+        <div class="fld"><label>Supervisor notes</label><textarea data-pn="${key}" placeholder="Evidence / calibration">${SP.spvNote[key]||''}</textarea></div>
+      </div>`;
+    }
+    h+=`</div></div>`;
+  });
+  h+=`</div>`;$('stageHost').innerHTML=h;wire();
+}
+
+function renderReflect(){
+  const PRIO=["High","Medium","Low"];
+  if(STAGE==='editor'){
+    const opts=KPI.map(c=>`<optgroup label="${c.cat}">`+c.metrics.map(m=>`<option>${m[0]}</option>`).join('')+`</optgroup>`).join('');
+    let fr='';
+    ED.focus.forEach((f,i)=>fr+=`<div class="m"><div class="mn" style="font-size:14px">Focus ${i+1}</div>
+      <div class="panels"><div class="panel self"><div class="ph">You spot it first</div>
+        <div class="fld"><label>What you want to grow</label><select data-fa="${i}"><option value="">Select area to grow…</option>${opts}</select></div>
+        <div class="fld"><label>Why / context</label><textarea data-fw="${i}" placeholder="Why this matters to you">${f.why||''}</textarea></div>
+      </div>
+      <div class="panel spv" style="opacity:.55"><div class="ph">Supervisor — we help</div><p class="ro" style="color:var(--faint);margin:4px 0 0">Your supervisor adds the agreed action, measure, and priority.</p></div>
+      </div></div>`);
+    fr+=`<button class="btn ghost" id="addFocus" style="padding-left:0">+ Add focus area</button>`;
+    const block=rows=>rows.map((r,i)=>`<div class="fld"><label>${r}</label><div class="ghelp">${EGUIDE[r]}</div><textarea data-sum="e${i}">${ED.sum['e'+i]||''}</textarea></div>`).join('');
+    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Reflection</div><h2>Focus for next quarter</h2>
+      <p class="hint">Name your own growth area first. Coming in blank is itself a flag — it factors into the evaluation.</p>${fr}
+      <h2 style="margin-top:24px;font-size:18px">Your written notes</h2>${block(EDITOR_ROWS)}</div>`;
+    wire();$('stageHost').querySelectorAll('[data-fa]').forEach(s=>s.value=ED.focus[+s.dataset.fa].area||'');
+  }else{
+    let fr='';
+    ED.focus.forEach((f,i)=>{const s=SP.foc[i]||(SP.foc[i]={action:'',measure:'',priority:''});
+      fr+=`<div class="m"><div class="mn" style="font-size:14px">Focus ${i+1}</div>
+      <div class="panels"><div class="panel ref"><div class="ph">Editor named</div>
+        <div class="ro"><div class="rr"><div class="rk">Wants to grow</div>${f.area||'—'}</div>${f.why?`<div class="rr"><div class="rk">Why</div>${f.why}</div>`:''}</div>
+      </div>
+      <div class="panel spv"><div class="ph">You — how we help</div>
+        <div class="fld"><label>Agreed action</label><textarea data-fact="${i}" placeholder="What we'll do to support it">${s.action||''}</textarea></div>
+        <div class="fld"><label>How to measure</label><textarea data-fm="${i}" placeholder="Concrete signal of progress">${s.measure||''}</textarea></div>
+        <div class="fld"><label>Priority</label><select data-fp="${i}"><option value="">—</option>${PRIO.map(p=>`<option ${s.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+      </div></div></div>`;});
+    const block=rows=>rows.map((r,i)=>`<div class="fld"><label>${r}</label><div class="ghelp">${SGUIDE[r]}</div><textarea data-sum="s${i}">${SP.sum['s'+i]||''}</textarea></div>`).join('');
+    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Reflection</div><h2>Support & assessment</h2>
+      <p class="hint">Respond to each growth area the editor named, then add your written assessment.</p>${fr}
+      <h2 style="margin-top:24px;font-size:18px">Supervisor written assessment</h2>${block(SPV_ROWS)}</div>`;
+    wire();
+  }
+}
+
+function renderReview(){
+  const cats=CATS();
+  if(STAGE==='editor'){
+    const so=overall('self');
+    let rows=`<div class="cr"><div>Category</div><div class="n">Self</div><div class="n">—</div></div>`;
+    cats.forEach((c,ci)=>rows+=`<div class="cr"><div>${c.name}</div><div class="n s">${fmt(catAvg(ci,'self'))}</div><div class="n p">·</div></div>`);
+    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Review · editor</div><h2>${$('employee').value||'—'} · ${$('quarter').value||'—'}</h2>
+      <div class="idtag">Case <b>${caseId||'—'}</b></div>
+      <div class="hero ${BAND(so)}"><div><div class="big">${fmt(so)}<span class="of"> / 5</span></div><div class="lab">Your self overall</div></div><div class="side">Locks your part. Supervisors score after.</div></div>
+      <div class="catlist">${rows}</div>
+      <div class="note warn" style="margin-top:14px"><b>Locking is final for your side.</b> You can't edit your self-scores after this — supervisors take over. Share the case link with them (shown after you lock).</div></div>`;
+  }else{
+    const myo=overall('spv'),so=overall('self');
+    const existing=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
+    const alreadyMe=existing.find(s=>s.name===mySupName);
+    let chips=existing.map(s=>`<span class="supchip">${s.name} <span class="sv ${BAND(s.overall)}">${fmt(s.overall)}</span></span>`).join('');
+    if(mySupName&&!alreadyMe)chips+=`<span class="supchip me">${mySupName} (you) <span class="sv ${BAND(myo)}">${fmt(myo)}</span></span>`;
+    const willFinal=[...existing.map(s=>+s.overall),...(alreadyMe?[]:[myo])].filter(x=>!isNaN(x)&&x!=null);
+    const proj=willFinal.length?+(willFinal.reduce((a,b)=>a+b,0)/willFinal.length).toFixed(2):null;
+    let rows=`<div class="cr"><div>Category</div><div class="n">Self</div><div class="n">You</div></div>`;
+    cats.forEach((c,ci)=>rows+=`<div class="cr"><div>${c.name}</div><div class="n s">${fmt(catAvg(ci,'self'))}</div><div class="n p">${fmt(catAvg(ci,'spv'))}</div></div>`);
+    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Review · supervisor</div><h2>${ED.editor||$('employee').value||'—'} · ${ED.quarter||$('quarter').value||'—'}</h2>
+      <div class="idtag">Case <b>${caseId||'—'}</b> · editor self <b>${fmt(so)}</b></div>
+      <div class="hero ${BAND(myo)}"><div><div class="big">${fmt(myo)}<span class="of"> / 5</span></div><div class="lab">Your overall</div></div><div class="side">Official KPI = mean of all supervisors${proj!=null?`<br>projected <b>${fmt(proj)}</b> with ${willFinal.length} supervisor${willFinal.length>1?'s':''}`:''}</div></div>
+      <div class="suplist">${chips||'<span class="ro" style="color:var(--faint)">No supervisors submitted yet</span>'}</div>
+      <div class="catlist" style="margin-top:12px">${rows}</div>
+      ${alreadyMe?'<div class="note warn" style="margin-top:12px">You already submitted for this case. You can still file the result if it isn\'t filed yet.</div>':''}</div>`;
+  }
+  wire();
+}
+
+function wire(){
+  const host=$('stageHost');
+  host.querySelectorAll('.seg:not(.ro) button').forEach(b=>b.addEventListener('click',()=>{
+    const{k,w,v}=b.dataset;const val=+v;const store=w==='self'?ED.self:SP.spv;
+    store[k]=store[k]===val?undefined:val;
+    // in-place: repaint only this seg group — no innerHTML swap, no .step rise-animation replay
+    b.parentElement.querySelectorAll('button').forEach(x=>{const on=store[k]===+x.dataset.v;x.className=on?`on ${BAND(+x.dataset.v)}`:'';x.setAttribute('aria-pressed',on);});
+    renderFooter();
+  }));
+  host.querySelectorAll('[data-a]').forEach(t=>t.addEventListener('input',()=>ED.actual[t.dataset.a]=t.value));
+  host.querySelectorAll('[data-sn]').forEach(t=>t.addEventListener('input',()=>ED.selfNote[t.dataset.sn]=t.value));
+  host.querySelectorAll('[data-pn]').forEach(t=>t.addEventListener('input',()=>SP.spvNote[t.dataset.pn]=t.value));
+  host.querySelectorAll('[data-fa]').forEach(s=>s.addEventListener('change',()=>ED.focus[+s.dataset.fa].area=s.value));
+  host.querySelectorAll('[data-fw]').forEach(i=>i.addEventListener('input',()=>ED.focus[+i.dataset.fw].why=i.value));
+  host.querySelectorAll('[data-fact]').forEach(i=>i.addEventListener('input',()=>SP.foc[+i.dataset.fact].action=i.value));
+  host.querySelectorAll('[data-fm]').forEach(i=>i.addEventListener('input',()=>SP.foc[+i.dataset.fm].measure=i.value));
+  host.querySelectorAll('[data-fp]').forEach(s=>s.addEventListener('change',()=>SP.foc[+s.dataset.fp].priority=s.value));
+  host.querySelectorAll('[data-sum]').forEach(t=>t.addEventListener('input',()=>{const k=t.dataset.sum;if(k[0]==='e')ED.sum[k]=t.value;else SP.sum[k]=t.value;}));
+  const af=host.querySelector('#addFocus');if(af)af.addEventListener('click',()=>{ED.focus.push({area:'',why:''});render();});
+}
+
+/* ===== validation ===== */
 function stepIncomplete(){
-  if(stepIdx<KPI.length){
-    const c=KPI[stepIdx];
-    for(let mi=0;mi<c.metrics.length;mi++){
-      const key=`${stepIdx}-${mi}`;
-      if(S.self[key]==null) return `Rate "${c.metrics[mi][0]}" (self) before continuing.`;
-      if(S.spv[key]==null) return `Rate "${c.metrics[mi][0]}" (supervisor) before continuing.`;
+  const cats=CATS();
+  if(stepIdx<cats.length){
+    const c=cats[stepIdx];
+    for(let mi=0;mi<c.metrics.length;mi++){const key=`${stepIdx}-${mi}`;
+      if(STAGE==='editor'){if(ED.self[key]==null)return `Rate "${c.metrics[mi].name}" before continuing.`;}
+      else{if(SP.spv[key]==null)return `Rate "${c.metrics[mi].name}" before continuing.`;}
     }
     return null;
   }
-  if(stepIdx===KPI.length){
-    const f=S.focus[0];
-    if(!f||!f.area||!f.why||!f.action||!f.measure||!f.priority) return 'Fill in Focus 1 (area, why, agreed action, how to measure, priority) before continuing.';
-    for(let i=0;i<EDITOR_ROWS.length;i++){ if(!S.sum[`e${i}`]) return `Fill in "${EDITOR_ROWS[i]}" (editor side) before continuing.`; }
-    for(let i=0;i<SPV_ROWS.length;i++){ if(!S.sum[`s${i}`]) return `Fill in "${SPV_ROWS[i]}" (supervisor side) before continuing.`; }
+  if(stepIdx===cats.length){
+    if(STAGE==='editor'){
+      const f=ED.focus[0];if(!f||!f.area||!f.why)return 'Fill in Focus 1 (what to grow + why) before continuing.';
+      for(let i=0;i<EDITOR_ROWS.length;i++)if(!ED.sum['e'+i])return `Fill in "${EDITOR_ROWS[i]}" before continuing.`;
+    }else{
+      for(let i=0;i<ED.focus.length;i++){const s=SP.foc[i]||{};if(!s.action||!s.measure||!s.priority)return `Respond to Focus ${i+1} (action, measure, priority).`;}
+      for(let i=0;i<SPV_ROWS.length;i++)if(!SP.sum['s'+i])return `Fill in "${SPV_ROWS[i]}" before continuing.`;
+    }
     return null;
   }
   return null;
 }
-function levelIdx(){return LK.indexOf(curLevel);}
-function catAvg(ci,who){const v=KPI[ci].metrics.map((_,mi)=>S[who][`${ci}-${mi}`]).filter(x=>x);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
-function overall(who){const c=KPI.map((_,ci)=>catAvg(ci,who)).filter(x=>x!=null);return c.length?c.reduce((a,b)=>a+b,0)/c.length:null;}
-const fmt=v=>v==null?"—":v.toFixed(2);
 
-const host=document.getElementById('stepHost');
-function render(){
-  const se=document.getElementById('stepErr');if(se)se.hidden=true;
-  const pct=Math.round(stepIdx/(TOTAL-1)*100);
-  document.getElementById('fill').style.width=pct+'%';
-  document.getElementById('progBar').setAttribute('aria-valuenow',pct);
-  if(stepIdx<KPI.length){renderCat(stepIdx);document.getElementById('progLbl').textContent=`${stepIdx+1} / ${TOTAL} · ${KPI[stepIdx].cat}`;}
-  else if(stepIdx===KPI.length){renderReflect();document.getElementById('progLbl').textContent=`${stepIdx+1} / ${TOTAL} · Reflection & focus`;}
-  else{renderReview();document.getElementById('progLbl').textContent=`${TOTAL} / ${TOTAL} · Review & file`;}
-  document.getElementById('btnBack').style.visibility=stepIdx===0?'hidden':'visible';
-  document.getElementById('btnNext').textContent=stepIdx<TOTAL-1?'Next →':'Preview report →';
-  const po=overall('spv'),so=overall('self');
-  document.getElementById('liveScore').innerHTML=po!=null?`Official <b>${fmt(po)}</b>${so!=null?` · self <b>${fmt(so)}</b>`:''}`:'';
-}
-function seg(key,who){let b='';for(let v=1;v<=5;v++){const sel=S[who][key]===v;const on=sel?`on ${BAND(v)}`:'';b+=`<button class="${on}" data-k="${key}" data-w="${who}" data-v="${v}" aria-pressed="${sel}" aria-label="Rate ${v} of 5">${v}</button>`;}return `<div class="seg" role="group" aria-label="1 to 5 rating">${b}</div>`;}
-function renderCat(ci){
-  const c=KPI[ci],li=levelIdx();
-  let h=`<div class="step"><div class="eyebrow">Category ${ci+1} of ${KPI.length}</div><h2>${c.cat}</h2>
-   <div class="scalekey"><span><b>1</b> Unsatisfactory</span><span><b>2</b> Needs work</span><span><b>3</b> Fair</span><span><b>4</b> Good</span><span><b>5</b> Excellent</span></div>`;
-  c.metrics.forEach((m,mi)=>{const key=`${ci}-${mi}`;const tgt=li>=0?m[1][li]:"Select an editor to load the level bar";
-    h+=`<div class="m"><div class="mn">${m[0]}</div>
-      <div class="tg"><b>Target · ${li>=0?LEVEL_LABEL[curLevel]:'—'}</b><br>${tgt}</div>
-      <div class="panels">
-        <div class="panel self"><div class="ph">Editor (self)</div>
-          <div class="fld"><label>Your actual — what you did this quarter</label><textarea data-a="${key}" placeholder="Concrete: projects, numbers, deliverables">${S.actual[key]||''}</textarea></div>
-          <div class="fld"><label>Your rating</label>${seg(key,'self')}</div>
-          <div class="fld"><label>Your notes</label><textarea data-sn="${key}" placeholder="Context for your score">${S.selfNote[key]||''}</textarea></div>
-        </div>
-        <div class="panel spv"><div class="ph">Supervisor</div>
-          <div class="fld"><label>Supervisor rating</label>${seg(key,'spv')}</div>
-          <div class="fld"><label>Supervisor notes</label><textarea data-pn="${key}" placeholder="Evidence / calibration">${S.spvNote[key]||''}</textarea></div>
-        </div>
-      </div></div>`;});
-  h+=`</div>`;host.innerHTML=h;wire();
-}
-const GUIDE={
-  "Strengths":{self:"Where were you strongest this quarter? Name projects or moments, not adjectives.",spv:"Where is this editor strongest, and how does it help the team?"},
-  "Growth areas":{self:"One or two areas to grow, tied to something you can point to.",spv:"One or two areas to grow, framed as growth with a concrete example."},
-  "Overall assessment":{self:"Net summary — your trajectory and readiness this quarter.",spv:"Net summary — trajectory, readiness, the headline call."}
-};
-function renderReflect(){
-  const PRIO=["High","Medium","Low"];
-  const opts=KPI.map(c=>`<optgroup label="${c.cat}">`+c.metrics.map(m=>`<option>${m[0]}</option>`).join('')+`</optgroup>`).join('');
-  let fr='';
-  S.focus.forEach((f,i)=>fr+=`<div class="m">
-    <div class="mn" style="font-size:14px">Focus ${i+1}</div>
-    <div class="panels">
-      <div class="panel self"><div class="ph">Editor — you spot it first</div>
-        <div class="fld"><label>What you want to grow</label><select data-fa="${i}"><option value="">Select area to grow…</option>${opts}</select></div>
-        <div class="fld"><label>Why / context</label><textarea data-fw="${i}" placeholder="Why this matters to you">${f.why||''}</textarea></div>
-      </div>
-      <div class="panel spv"><div class="ph">Supervisor — we help</div>
-        <div class="fld"><label>Agreed action</label><textarea data-fact="${i}" placeholder="What we'll do to support it">${f.action||''}</textarea></div>
-        <div class="fld"><label>How to measure</label><textarea data-fm="${i}" placeholder="Concrete signal of progress">${f.measure||''}</textarea></div>
-        <div class="fld"><label>Priority</label><select data-fp="${i}"><option value="">—</option>${PRIO.map(p=>`<option ${f.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
-      </div>
-    </div></div>`);
-  fr+=`<button class="btn ghost" id="addFocus" style="padding-left:0">+ Add focus area</button>`;
-  const block=(rows,guide,side,title)=>`<h3 style="margin:16px 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:${side==='e'?'var(--self)':'var(--spv)'}">${title}</h3>`+rows.map((r,i)=>`<div class="fld"><label>${r}</label><div class="ghelp">${guide[r]}</div><textarea data-sum="${side}${i}">${S.sum[`${side}${i}`]||''}</textarea></div>`).join('');
-  host.innerHTML=`<div class="step"><div class="eyebrow">Reflection</div><h2>Focus for next quarter</h2>
-    <p class="hint">Name your own growth area first. Coming in blank is itself a flag — it factors into the evaluation, and it's where we step in to help.</p>${fr}
-    <h2 style="margin-top:24px;font-size:18px">Written assessment</h2>
-    ${block(EDITOR_ROWS,EGUIDE,'e','Editor side')}${block(SPV_ROWS,SGUIDE,'s','Supervisor side')}</div>`;
-  wire();host.querySelectorAll('[data-fa]').forEach(s=>s.value=S.focus[+s.dataset.fa].area||'');
-}
-function renderReview(){
-  const po=overall('spv'),so=overall('self');let side=(so!=null&&po!=null)?`Self ${fmt(so)} · gap ${(so-po>=0?'+':'')}${fmt(so-po)}`:'Self incomplete';
-  let rows=`<div class="cr"><div>Category</div><div class="n">Self</div><div class="n">SPV</div></div>`;
-  KPI.forEach((c,ci)=>rows+=`<div class="cr"><div>${c.cat}</div><div class="n s">${fmt(catAvg(ci,'self'))}</div><div class="n p">${fmt(catAvg(ci,'spv'))}</div></div>`);
-  host.innerHTML=`<div class="step"><div class="eyebrow">Review</div><h2>${empSel.value||'—'} · ${qEl.value||'—'}</h2>
-    <div class="hero ${po!=null?BAND(po):''}"><div><div class="big">${fmt(po)}<span class="of"> / 5</span></div><div class="lab">Official KPI · supervisor overall</div></div><div class="side">${side}</div></div>
-    <div class="catlist">${rows}</div></div>`;wire();
-}
-function wire(){
-  host.querySelectorAll('.seg button').forEach(b=>b.addEventListener('click',()=>{const{k,w,v}=b.dataset;const val=+v;S[w][k]=S[w][k]===val?undefined:val;render();}));
-  host.querySelectorAll('[data-a]').forEach(t=>t.addEventListener('input',()=>S.actual[t.dataset.a]=t.value));
-  host.querySelectorAll('[data-sn]').forEach(t=>t.addEventListener('input',()=>S.selfNote[t.dataset.sn]=t.value));
-  host.querySelectorAll('[data-pn]').forEach(t=>t.addEventListener('input',()=>S.spvNote[t.dataset.pn]=t.value));
-  host.querySelectorAll('[data-fa]').forEach(s=>s.addEventListener('change',()=>S.focus[+s.dataset.fa].area=s.value));
-  host.querySelectorAll('[data-fw]').forEach(i=>i.addEventListener('input',()=>S.focus[+i.dataset.fw].why=i.value));
-  host.querySelectorAll('[data-fact]').forEach(i=>i.addEventListener('input',()=>S.focus[+i.dataset.fact].action=i.value));
-  host.querySelectorAll('[data-fm]').forEach(i=>i.addEventListener('input',()=>S.focus[+i.dataset.fm].measure=i.value));
-  host.querySelectorAll('[data-fp]').forEach(s=>s.addEventListener('change',()=>S.focus[+s.dataset.fp].priority=s.value));
-  const af=host.querySelector('#addFocus');if(af)af.addEventListener('click',()=>{S.focus.push({area:"",why:"",action:"",measure:"",priority:""});render();});
-  host.querySelectorAll('[data-sum]').forEach(t=>t.addEventListener('input',()=>S.sum[t.dataset.sum]=t.value));
-}
-document.getElementById('btnBack').addEventListener('click',()=>{if(stepIdx>0){stepIdx--;render();scrollTo(0,0);}});
-document.getElementById('btnNext').addEventListener('click',()=>{if(stepIdx<TOTAL-1){if(stepIdx===0&&!empSel.value){const err=document.getElementById('ctxErr');err.hidden=false;empSel.classList.add('bad');empSel.focus();return;}const msg=stepIncomplete();if(msg){const se=document.getElementById('stepErr');se.textContent=msg;se.hidden=false;scrollTo(0,0);return;}stepIdx++;render();scrollTo(0,0);}else{const msg=stepIncomplete();if(msg){const se=document.getElementById('stepErr');se.textContent=msg;se.hidden=false;scrollTo(0,0);return;}openPreview();}});
-empSel.addEventListener('change',()=>{document.getElementById('ctxErr').hidden=true;empSel.classList.remove('bad');});
-
-function buildPayload(){
-  const li=levelIdx();
-  return{editor:empSel.value,level:curLevel,supervisor:S.supers.join(' & '),supervisors:S.supers,quarter:qEl.value,submitted_at:new Date().toISOString(),
-    official_kpi:overall('spv'),self_overall:overall('self'),
-    categories:KPI.map((c,ci)=>({name:c.cat,spv:catAvg(ci,'spv'),self:catAvg(ci,'self'),
-      metrics:c.metrics.map((m,mi)=>{const k=`${ci}-${mi}`;return{metric:m[0],target:li>=0?m[1][li]:null,actual:S.actual[k]||null,self:S.self[k]??null,self_note:S.selfNote[k]||null,spv:S.spv[k]??null,spv_note:S.spvNote[k]||null};})})),
-    focus:S.focus.filter(f=>f.area||f.why||f.action||f.measure).map(f=>({area:f.area,why:f.why,action:f.action,measure:f.measure,priority:f.priority})),
-    summary_editor:EDITOR_ROWS.map((r,i)=>({row:r,text:S.sum[`e${i}`]||''})),
-    summary_supervisor:SPV_ROWS.map((r,i)=>({row:r,text:S.sum[`s${i}`]||''})),
-    summary_self:EDITOR_ROWS.map((r,i)=>S.sum[`e${i}`]?`${r}: ${S.sum[`e${i}`]}`:'').filter(Boolean).join('\n'),
-    summary_spv:SPV_ROWS.map((r,i)=>S.sum[`s${i}`]?`${r}: ${S.sum[`s${i}`]}`:'').filter(Boolean).join('\n')};
-}
-
-const preview=document.getElementById('preview'),formEl=document.getElementById('form');
-function openPreview(){document.getElementById('pvBody').innerHTML=reportHTML(buildPayload());formEl.style.display='none';document.getElementById('navbar').style.display='none';preview.style.display='block';scrollTo(0,0);}
-document.getElementById('pvBack').addEventListener('click',()=>{preview.style.display='none';formEl.style.display='block';document.getElementById('navbar').style.display='block';});
-document.getElementById('pvPrint').addEventListener('click',()=>print());
-document.getElementById('pvSubmit').addEventListener('click',submitToWorker);
-const chip=v=>v==null?`<span class="chip na">—</span>`:`<span class="chip ${BAND(v)}">${v}</span>`;
-function reportHTML(d){
-  const po=d.official_kpi,so=d.self_overall;
-  let body='';
-  d.categories.forEach(c=>{body+=`<div class="catlist"><div class="cr"><div>${c.name}</div><div class="n s">${fmt(c.self)}</div><div class="n p">${fmt(c.spv)}</div></div></div>`;
-    c.metrics.forEach(m=>{body+=`<div class="rpt-m"><div class="mn">${m.metric}</div><div class="tg">Target: ${m.target||'—'}</div>
-      <div class="rpt-cols">
-        <div><b>Self</b> ${chip(m.self)}<div style="margin-top:4px">${m.actual?`<i>Actual:</i> ${m.actual}<br>`:''}${m.self_note?`<i>Notes:</i> ${m.self_note}`:''}</div></div>
-        <div><b>Supervisor</b> ${chip(m.spv)}<div style="margin-top:4px">${m.spv_note?`<i>Notes:</i> ${m.spv_note}`:''}</div></div>
-      </div></div>`;});});
-  const focus=d.focus.length?`<h2 style="font-size:16px;margin-top:16px">Focus · next quarter</h2>`+d.focus.map(f=>`<div class="rpt-m"><div class="mn" style="font-size:14px">${f.area||'—'}${f.priority?` <span class="chip ${f.priority==='High'?'b12':f.priority==='Medium'?'b3':'b45'}" style="font-size:11px">${f.priority}</span>`:''}</div><div class="rpt-cols" style="margin-top:6px"><div><i>Why:</i> ${f.why||'—'}</div><div><i>Agreed action:</i> ${f.action||'—'}<br><i>Measure:</i> ${f.measure||'—'}</div></div></div>`).join(''):'';
-  const sumBlock=(arr,title,color)=>`<h3 style="font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:${color}">${title}</h3>`+arr.map(s=>`<div class="rpt-m"><div class="mn" style="font-size:13px">${s.row}</div><div style="font-size:13px;white-space:pre-wrap">${s.text||'—'}</div></div>`).join('');
-  let sum=`<h2 style="font-size:16px;margin-top:16px">Written assessment</h2>`+sumBlock(d.summary_editor,'Editor side','var(--self)')+sumBlock(d.summary_supervisor,'Supervisor side','var(--spv)');
-  const side=(so!=null&&po!=null)?`Self ${fmt(so)} · gap ${(so-po>=0?'+':'')}${fmt(so-po)}`:'Self incomplete';
-  return`<div class="step" style="animation:none"><div class="eyebrow">Filed report</div><h2>${d.editor||'—'} · ${d.quarter||'—'}</h2>
-    <div class="hint">Level ${LEVEL_LABEL[d.level]||'—'} · Supervisor ${d.supervisor||'—'}</div>
-    <div class="hero ${po!=null?BAND(po):''}"><div><div class="big">${fmt(po)}<span class="of"> / 5</span></div><div class="lab">Official KPI · supervisor overall</div></div><div class="side">${side}</div></div>
-    ${body}${focus}${sum}
-    <p class="hint" style="margin-top:14px">Supervisor overall is the recorded KPI; the self-rating is calibration only.</p>
-    </div>`;
-}
-async function submitToWorker(){
-  const b=document.getElementById('pvSubmit');b.disabled=true;b.textContent='Filing…';
-  try{const r=await fetch(`${WORKER_URL}/submit/kpi`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(buildPayload())});const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);b.textContent='Filed ✓';alert(`Stored + PDF attached to ClickUp.\nClickUp task: ${j.clickup_task_id||'(none)'}`);}
-  catch(e){b.textContent='File to ClickUp';b.disabled=false;alert('Failed: '+e.message);}
-}
-loadConfig().then(()=>{TOTAL=KPI.length+2;ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;empSel.appendChild(o);});render();}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
-</script>
-<script>
-/* ===== Tweaks panel wiring — appearance only, in-memory, no storage ===== */
-(function(){
-  const ACCENTS=[['indigo','#4f46e5','#eef0fe'],['teal','#0d9488','#e6f6f3'],['amber','#b45309','#fbf1e6'],['graphite','#3f4653','#eef0f3'],['rose','#be185d','#fce7f0']];
-  const DEF={density:'cozy',accent:'indigo',character:'calm'};
-  const T=Object.assign({},DEF);
-  const body=document.body;
-  const accHost=document.getElementById('twAccent');
-  ACCENTS.forEach(([id,hex])=>{const b=document.createElement('button');b.className='tw-sw';b.type='button';b.dataset.v=id;b.style.background=hex;b.style.color=hex;b.setAttribute('aria-label',id+' accent');accHost.appendChild(b);});
-  function apply(){
-    body.classList.remove('dens-compact','dens-cozy','dens-roomy');body.classList.add('dens-'+T.density);
-    body.classList.remove('char-calm','char-sharp','char-bold');body.classList.add('char-'+T.character);
-    const a=ACCENTS.find(x=>x[0]===T.accent)||ACCENTS[0];
-    document.documentElement.style.setProperty('--kpi',a[1]);
-    document.documentElement.style.setProperty('--accent-soft',a[2]);
-    document.querySelectorAll('.tw-seg[data-group=density] button').forEach(b=>b.classList.toggle('on',b.dataset.v===T.density));
-    document.querySelectorAll('.tw-seg[data-group=character] button').forEach(b=>b.classList.toggle('on',b.dataset.v===T.character));
-    accHost.querySelectorAll('.tw-sw').forEach(b=>b.classList.toggle('on',b.dataset.v===T.accent));
+/* ===== nav (single delegated handler; footer rebuilt per step by renderFooter) ===== */
+$('navInner').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;switch(b.id){
+  case 'btnBack': if(stepIdx>0){stepIdx--;render();scrollTo(0,0);} break;
+  case 'btnNext': handleNext(); break;
+  case 'rLock': lockEditor(); break;
+  case 'rSubmit': submitSupervisor(); break;
+  case 'rFile': fileFinal(); break;
+}});
+function handleNext(){
+  if(stepIdx===0){
+    if(!$('employee').value){$('ctxErr').textContent='Select an editor to begin.';$('ctxErr').hidden=false;$('employee').classList.add('bad');$('employee').focus();return;}
+    if(!$('quarter').value.trim()){$('ctxErr').textContent='Enter the quarter (e.g. Q3 2026).';$('ctxErr').hidden=false;return;}
+    if(STAGE==='supervisor'){
+      if(!mySupName){$('ctxErr').textContent='Pick who you are scoring as.';$('ctxErr').hidden=false;return;}
+      if(!KPICASE){$('ctxErr').textContent='No open locked case to score — check the editor and quarter above.';$('ctxErr').hidden=false;return;}
+    }
   }
-  document.querySelectorAll('.tw-seg').forEach(g=>g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;T[g.dataset.group]=b.dataset.v;apply();}));
-  accHost.addEventListener('click',e=>{const b=e.target.closest('.tw-sw');if(!b)return;T.accent=b.dataset.v;apply();});
-  const panel=document.getElementById('twPanel'),toggle=document.getElementById('twToggle');
-  toggle.addEventListener('click',()=>{const open=panel.hasAttribute('hidden');if(open){panel.removeAttribute('hidden');}else{panel.setAttribute('hidden','');}toggle.setAttribute('aria-expanded',open);});
-  document.addEventListener('click',e=>{if(!e.target.closest('#tweaks')&&!panel.hasAttribute('hidden')){panel.setAttribute('hidden','');toggle.setAttribute('aria-expanded','false');}});
-  document.getElementById('twReset').addEventListener('click',()=>{Object.assign(T,DEF);apply();});
-  apply();
-})();
+  const msg=stepIncomplete();if(msg)return showStepErr(msg);
+  if(stepIdx<TOTAL()-1){stepIdx++;render();scrollTo(0,0);}
+}
+function showStepErr(msg){const se=$('stepErr');se.textContent=msg;se.hidden=false;scrollTo(0,0);}
+
+function renderFooter(){
+  const total=TOTAL(),last=stepIdx===total-1,nav=$('navInner');
+  if(!last){
+    nav.innerHTML=`<button class="btn" id="btnBack" style="visibility:${stepIdx===0?'hidden':'visible'}">← Back</button><div class="spacer"></div><span class="live" id="liveScore"></span><button class="btn primary" id="btnNext">${stepIdx<total-2?'Next →':(STAGE==='editor'?'Review & lock →':'Review & file →')}</button>`;
+    const own=STAGE==='editor'?overall('self'):overall('spv');
+    const ref=STAGE==='supervisor'?overall('self'):null;
+    $('liveScore').innerHTML=own!=null?`${STAGE==='editor'?'Self':'Your'} <b>${fmt(own)}</b>${ref!=null?` · editor self <b>${fmt(ref)}</b>`:''}`:'';
+    return;
+  }
+  if(STAGE==='editor'){
+    nav.innerHTML=`<button class="btn" id="btnBack">← Back</button><div class="spacer"></div><button class="btn primary" id="rLock">Lock my scores →</button>`;
+  }else{
+    const existing=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
+    const alreadyMe=existing.find(s=>s.name===mySupName);
+    const canFile=(existing.length+(alreadyMe?0:1))>=1 && !(KPICASE&&KPICASE.finalized);
+    nav.innerHTML=`<button class="btn" id="btnBack">← Back</button><div class="spacer"></div>`+
+      (alreadyMe||(KPICASE&&KPICASE.finalized)?'':`<button class="btn" id="rSubmit">Submit my scores</button>`)+
+      (canFile?`<button class="btn primary" id="rFile">File to ClickUp</button>`:'');
+  }
+}
+
+/* ===== builders ===== */
+function buildEditorData(){
+  const li=levelIdx();
+  const cats=KPI.map((c,ci)=>({name:c.cat,metrics:c.metrics.map((m,mi)=>({name:m[0],target:li>=0?m[1][li]:''}))}));
+  const targets={};KPI.forEach((c,ci)=>c.metrics.forEach((m,mi)=>targets[`${ci}-${mi}`]=li>=0?m[1][li]:''));
+  return{self:ED.self,actual:ED.actual,selfNote:ED.selfNote,
+    focus:ED.focus.filter(f=>f.area||f.why),sum:ED.sum,cats,targets};
+}
+async function lockEditor(){
+  const b=$('rLock');b.disabled=true;b.textContent='Locking…';
+  const payload={id:caseId,editor:$('employee').value,level:curLevel,quarter:$('quarter').value.trim(),
+    editor_data:buildEditorData(),self_overall:overall('self'),config_version:CONFIG_VERSION};
+  try{
+    const r=await fetch(`${WORKER_URL}/kpi/editor`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+    showDone('editor',payload.id);
+  }catch(e){b.disabled=false;b.textContent='Lock my scores →';alert('Failed to lock: '+e.message);}
+}
+async function submitSupervisor(){
+  const b=$('rSubmit');b.disabled=true;b.textContent='Submitting…';
+  const sd={spv:SP.spv,spvNote:SP.spvNote,foc:SP.foc,sum:SP.sum};
+  try{
+    const r=await fetch(`${WORKER_URL}/kpi/supervisor`,{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({id:caseId,supervisor_name:mySupName,supervisor_data:sd,supervisor_overall:overall('spv')})});
+    const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+    await loadCase(caseId);hydrateFromCase(KPICASE);render();
+    alert(`Your scores are recorded (${j.supervisor_count} supervisor${j.supervisor_count>1?'s':''} so far). File the result when ready.`);
+  }catch(e){b.disabled=false;b.textContent='Submit my scores';alert('Failed: '+e.message);}
+}
+function buildFinalCategories(){
+  // spv per metric = mean across all submitted supervisors (incl. me if not yet stored)
+  const stored=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
+  const allSpv=stored.map(s=>(s.data&&s.data.spv)||{});
+  if(!stored.find(s=>s.name===mySupName))allSpv.push(SP.spv);
+  const meanAt=key=>{const vs=allSpv.map(o=>o[key]).filter(x=>x!=null);return vs.length?+(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(2):null;};
+  const meStored=!!stored.find(s=>s.name===mySupName);
+  const multi=stored.length+(meStored?0:1)>1;
+  const noteAt=key=>{const parts=[];
+    stored.forEach(s=>{const n=s.data&&s.data.spvNote&&s.data.spvNote[key];if(n)parts.push(multi?`${s.name}: ${n}`:n);});
+    if(!meStored){const n=SP.spvNote[key];if(n)parts.push(multi?`${mySupName}: ${n}`:n);}
+    return parts.join(' · ');};
+  return ED.cats.map((c,ci)=>{
+    const metrics=c.metrics.map((m,mi)=>{const k=`${ci}-${mi}`;return{metric:m.name,target:ED.targets[k]||m.target||'',self:ED.self[k]??null,spv:meanAt(k),spv_note:noteAt(k)};});
+    const selfAvg=metrics.map(m=>m.self).filter(x=>x!=null);const spvAvg=metrics.map(m=>m.spv).filter(x=>x!=null);
+    return{name:c.name,metrics,self:selfAvg.length?+(selfAvg.reduce((a,b)=>a+b)/selfAvg.length).toFixed(2):null,spv:spvAvg.length?+(spvAvg.reduce((a,b)=>a+b)/spvAvg.length).toFixed(2):null};
+  });
+}
+function buildFinalFocus(){
+  const stored=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
+  const firstSpvFoc=(stored.find(s=>s.data&&s.data.foc)||{}).data?.foc || SP.foc;
+  return ED.focus.map((f,i)=>{const s=(firstSpvFoc&&firstSpvFoc[i])||SP.foc[i]||{};return{area:f.area,why:f.why,action:s.action||'',measure:s.measure||'',priority:s.priority||''};});
+}
+async function fileFinal(){
+  if(!confirm(`File the KPI result for ${ED.editor}?\n\nOfficial KPI = mean of all submitted supervisors. This creates the ClickUp report PDF.`))return;
+  const b=$('rFile');b.disabled=true;b.textContent='Filing…';
+  const payload={id:caseId,supervisor:[...new Set([...( (KPICASE.supervisors||[]).map(s=>s.name)),mySupName])].join(' & '),
+    categories:buildFinalCategories(),focus:buildFinalFocus()};
+  try{
+    // ensure my scores are stored first if not yet
+    const stored=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
+    if(!stored.find(s=>s.name===mySupName)){
+      const sr=await fetch(`${WORKER_URL}/kpi/supervisor`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:caseId,supervisor_name:mySupName,supervisor_data:{spv:SP.spv,spvNote:SP.spvNote,foc:SP.foc,sum:SP.sum},supervisor_overall:overall('spv')})});
+      const sj=await sr.json();if(!sr.ok&&sr.status!==409)throw new Error(sj.error||('HTTP '+sr.status));
+      await loadCase(caseId);
+      payload.categories=buildFinalCategories();payload.focus=buildFinalFocus();
+      payload.supervisor=[...new Set((KPICASE.supervisors||[]).map(s=>s.name))].join(' & ');
+    }
+    const r=await fetch(`${WORKER_URL}/kpi/finalize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+    showDone('filed',caseId,j);
+  }catch(e){b.disabled=false;b.textContent='File to ClickUp';alert('Failed to file: '+e.message);}
+}
+
+/* ===== done screens ===== */
+function showDone(kind,id,j){
+  hideNav();
+  const link=`${location.origin}${location.pathname}?kpi=${encodeURIComponent(id)}`;
+  if(kind==='editor'){
+    $('stageHost').innerHTML=`<div class="done"><div class="big">🔒</div><h2>Self-review locked</h2>
+      <p>Your part of <b>${id}</b> is saved. Supervisors score independently, then file the result.</p>
+      <div class="linkbox"><input id="shareLink" readonly value="${link}"><button class="btn" id="copyLink">Copy</button></div>
+      <p class="hint">Send this link to your supervisor(s) — it opens straight into supervisor scoring for your case.</p></div>`;
+  }else{
+    $('stageHost').innerHTML=`<div class="done"><div class="big">✓</div><h2>KPI filed</h2>
+      <p>Official KPI <b>${j&&j.official_kpi!=null?j.official_kpi:'—'}</b> · ${j&&j.supervisor_count||'?'} supervisor(s). Report PDF attached to ClickUp${j&&j.clickup_task_id?` (task ${j.clickup_task_id})`:''}.</p>
+      <div class="linkbox"><input id="shareLink" readonly value="${link}"><button class="btn" id="copyLink">Copy case link</button></div></div>`;
+  }
+  const cp=$('copyLink');if(cp)cp.onclick=async()=>{const i=$('shareLink');try{await navigator.clipboard.writeText(i.value);}catch(e){i.select();document.execCommand('copy');}cp.textContent='Copied ✓';setTimeout(()=>cp.textContent=kind==='editor'?'Copy':'Copy case link',1500);};
+}
+
+/* ===== helpers ===== */
+function showNav(){$('navbar').style.display='block';}
+function hideNav(){$('navbar').style.display='none';}
+function resetAll(){STAGE='gate';stepIdx=0;curLevel='';KPICASE=null;caseId='';loadedFromLink=false;mySupName='';resetEditorScores();SP.spv={};SP.spvNote={};SP.foc=[];SP.sum={};$('ctxHost').innerHTML='';$('ctxErr').hidden=true;}
+
 </script>
 </body>
 </html>
