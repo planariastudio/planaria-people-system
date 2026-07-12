@@ -87,16 +87,14 @@
       <div class="f"><label>Manager</label>
         <div class="supbox"><button class="supbtn empty" id="mgrBtn" type="button">Select…</button>
           <div class="supmenu" id="mgrMenu">
-            <label><input type="checkbox" value="Joshua"> Joshua</label>
-            <label><input type="checkbox" value="Rashy"> Rashy</label>
             <div class="add"><input id="mgrAdd" placeholder="Add another"><button type="button" id="mgrAddBtn">Add</button></div>
           </div></div></div>
-      <div class="f"><label>Severity</label><select id="severity"><option value="">—</option><option value="30">Minor (30d)</option><option value="60">Moderate (60d)</option><option value="90">Severe (90d)</option></select></div>
+      <div class="f"><label>Severity</label><select id="severity"><option value="">—</option></select></div>
       <div class="f"><label>Start date</label><input id="start" type="date"></div>
       <div class="f"><label>Duration (auto)</label><div class="auto" id="durAuto">—</div></div>
       <div class="f"><label>Review date (auto)</label><div class="auto" id="revAuto">—</div></div>
     </div>
-    <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0">Pass bar = <b>3.0</b> (Fair, at their level) on every flagged competency by the review date, held into next quarter.</p>
+    <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0">Pass bar = <b id="passBarTxt">3.0</b> (Fair, at their level) on every flagged competency by the review date, held into next quarter.</p>
     <div id="openNote" hidden style="margin-top:10px;padding:10px 12px;background:#fdf3e8;border:1px solid #f0c98a;border-radius:8px;font-size:12.5px;color:#8a5a12"></div>
   </div>
 
@@ -140,13 +138,18 @@
     <button class="btn" id="btnSave">Save progress</button>
     <button class="btn primary" id="btnFile" disabled title="Available once a final verdict (PASS or NOT MET) is reached">File verdict</button>
   </div>
+  <div class="noprint" id="caseLink" hidden style="display:flex;gap:8px;align-items:center;margin-top:12px">
+    <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap">Case link</span>
+    <input readonly id="caseLinkUrl" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12px;background:#f3f4f6;color:#374151">
+    <button class="btn" id="copyCase" type="button" style="padding:8px 14px">Copy</button>
+  </div>
 </div>
 
 <script>
 /* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
 let ROSTER=[], LL={intern:"Intern",jr:"Jr",ve:"Video Editor",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], BARS={}, COMPS=[];
-const PASS_BAR=3.0;
+let PASS_BAR=3.0, MGRS=["Joshua","Rashy"], SEVMAP={Minor:30,Moderate:60,Severe:90};
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
 function bulletsToLine(x){return Array.isArray(x)?x.join(' \u00b7 '):(x||'');}
 async function fetchWithRetry(url,tries=4,delayMs=700){
@@ -173,6 +176,10 @@ async function loadConfig(){
     ];
   });
   COMPS=Object.keys(BARS);
+  const L=k=>((cfg.lists||[]).find(l=>l.key===k)||{}).value;
+  const sup=L('supervisors'); if(Array.isArray(sup)&&sup.length)MGRS=sup;
+  const sev=L('severity_duration'); if(sev&&typeof sev==='object'&&Object.keys(sev).length)SEVMAP=sev;
+  const pb=L('pass_bar'); if(pb&&pb.pip!=null)PASS_BAR=+pb.pip;
 }
 
 const S={gaps:[mkGap()],actions:[mkAct(),mkAct(),mkAct()],cps:[{},{},{},{}],managers:[]};
@@ -195,6 +202,8 @@ async function maybeAutoId(){
     if(oj.open){
       await loadCase(oj.id);
       currentIsOpen=true;
+      lastEditor=edSel.value;
+      updateCaseLink(oj.id);
       const note=$('openNote');
       if(note){note.hidden=false;note.innerHTML=`<b>${edSel.value}</b> already has an open PIP (<b>${oj.id}</b>) — loaded it below. Finish and file it before starting a new one.`;}
       return;
@@ -216,10 +225,21 @@ function resetCaseState(){
   currentIsOpen=false;
   const note=$('openNote'); if(note) note.hidden=true;
   $('result').value=''; $('finalDate').value=''; $('summary').value='';
+  const cl=$('caseLink'); if(cl)cl.hidden=true;
   S.gaps=[mkGap()]; S.actions=[mkAct(),mkAct(),mkAct()]; S.cps=[{},{},{},{}];
   buildGaps(); buildActions(); buildCheckpoints();
 }
-edSel.addEventListener('change',()=>{const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";if(!loadedFromLink)resetCaseState();buildGaps();recompute();maybeAutoId();});
+let lastEditor='';
+edSel.addEventListener('change',()=>{
+  if((loadedFromLink||currentIsOpen)&&$('pid').value&&lastEditor&&edSel.value!==lastEditor){
+    if(!confirm(`You're switching away from loaded case ${$('pid').value} (${lastEditor}). Unsaved edits will be lost. Start fresh for ${edSel.value}?`)){edSel.value=lastEditor;return;}
+    loadedFromLink=false;
+  }
+  lastEditor=edSel.value;
+  const r=ROSTER.find(x=>x[0]===edSel.value);curLevel=r?r[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—";
+  if(!loadedFromLink)resetCaseState();
+  buildGaps();recompute();maybeAutoId();
+});
 $('severity').addEventListener('change',recompute);
 $('start').addEventListener('change',()=>{recompute();maybeAutoId();});
 
@@ -290,7 +310,7 @@ function recompute(){
 function buildPayload(){
   const lv=li(),cp=cpDates(),v=verdict();
   return{pip_id:$('pid').value,editor:edSel.value,level:curLevel,manager:S.managers.join(' & '),managers:S.managers,
-    severity:{30:'Minor',60:'Moderate',90:'Severe'}[dur()]||null,duration_d:dur(),start_date:$('start').value,review_date:cp[3],
+    severity:(Object.entries(SEVMAP).find(([,d])=>+d===dur())||[null])[0],duration_d:dur(),start_date:$('start').value,review_date:cp[3],
     gaps:S.gaps.filter(g=>g.comp).map(g=>({competency:g.comp,required:lv>=0?BARS[g.comp][lv]:null,score_now:g.now||null,evidence:g.evidence,target:g.target,support:g.support,score:g.review||null,met:g.review!==''?(+g.review>=PASS_BAR):null})),
     actions:S.actions.filter(a=>a.editor||a.company).map(a=>({editor:a.editor,company:a.company,by:a.by})),
     checkpoints:S.cps.map((c,i)=>({n:i+1,date:cp[i],on_track:c.ot||null,notes:c.notes||null})),
@@ -312,13 +332,21 @@ function setupIncomplete(){
   if(badAct) return 'Fill in editor action, company support, and a date for every action row you started.';
   return null;
 }
+function outcomeIncomplete(){
+  if(!$('result').value) return 'Pick a Result (Passed / Extended / Exit) before filing.';
+  if(!$('finalDate').value) return 'Set the Final review date before filing.';
+  if(!$('summary').value.trim()) return 'Write the Summary / rationale before filing — it is the outcome record.';
+  return null;
+}
 async function savePip(finalizing){
   if(!edSel.value||!dur()||!$('start').value){alert('Editor, severity and start date are required.');return;}
   if(finalizing){
-    const setupMsg=setupIncomplete();
+    const setupMsg=setupIncomplete()||outcomeIncomplete();
     if(setupMsg){alert(setupMsg);return;}
-    const v=buildPayload().verdict;
-    if(!confirm(`File the final verdict for ${edSel.value}?\n\nVerdict: ${v}\n\nThis closes the PIP — it can't be reopened for edits, and a new PIP can then be started for this editor. Are you sure?`)) return;
+    const p0=buildPayload();
+    if(p0.verdict==='PASS'&&p0.result==='Exit'&&!confirm('Contradiction: auto-verdict is PASS but Result is set to "Exit". File anyway?'))return;
+    if(p0.verdict.indexOf('NOT MET')===0&&p0.result==='Passed — off PIP'&&!confirm('Contradiction: auto-verdict is NOT MET but Result says "Passed — off PIP". File anyway?'))return;
+    if(!confirm(`File the final verdict for ${edSel.value}?\n\nVerdict: ${p0.verdict}\n\nThis closes the PIP — it can't be reopened for edits, and a new PIP can then be started for this editor. Are you sure?`)) return;
   }
   let pipId=$('pid').value;
   if(!pipId){
@@ -330,7 +358,7 @@ async function savePip(finalizing){
   }
   $('pid').value=pipId;
   const b=finalizing?$('btnFile'):$('btnSave');
-  const orig=b.textContent;b.disabled=true;b.textContent='Saving…';
+  const orig=b.textContent;$('btnSave').disabled=true;$('btnFile').disabled=true;b.textContent='Saving…';
   try{
     const payload=buildPayload();
     if(finalizing) payload._finalize=true;
@@ -339,20 +367,32 @@ async function savePip(finalizing){
     b.textContent=finalizing?'Filed ✓':'Saved ✓';
     if(finalizing){
       alert(`Verdict FILED and PIP closed (ClickUp task ${j.clickup_task_id}). A new PIP can now be started for ${edSel.value} if ever needed.`);
-    }else{
-      alert(`Progress saved. Reopen or share this case anytime with: this page's URL + ?pip=${pipId}`);
     }
-    setTimeout(()=>{b.disabled=false;b.textContent=orig;recompute();},1500);
+    updateCaseLink(pipId);
+    setTimeout(()=>{$('btnSave').disabled=false;b.textContent=orig;recompute();},1500);
   }
-  catch(e){b.disabled=false;b.textContent=orig;alert('Failed: '+e.message);}
+  catch(e){$('btnSave').disabled=false;b.textContent=orig;recompute();alert('Failed: '+e.message);}
 }
 $('btnSave').addEventListener('click',()=>savePip(false));
 $('btnFile').addEventListener('click',()=>savePip(true));
 $('addGap').addEventListener('click',()=>{S.gaps.push(mkGap());buildGaps();recompute();});
 $('addAct').addEventListener('click',()=>{S.actions.push(mkAct());buildActions();});
 
+function updateCaseLink(id){
+  if(!id)return;
+  const box=$('caseLink');box.hidden=false;
+  $('caseLinkUrl').value=location.origin+location.pathname+'?pip='+encodeURIComponent(id);
+}
+$('copyCase').addEventListener('click',async()=>{
+  const i=$('caseLinkUrl');
+  try{await navigator.clipboard.writeText(i.value);}catch(e){i.select();document.execCommand('copy');}
+  const c=$('copyCase');c.textContent='Copied ✓';setTimeout(()=>c.textContent='Copy',1500);
+});
 async function boot(){
   await loadConfig();
+  $('passBarTxt').textContent=PASS_BAR.toFixed(1);
+  MGRS.forEach(nm=>{const l=document.createElement('label');l.innerHTML=`<input type="checkbox" value="${nm}"> ${nm}`;l.querySelector('input').addEventListener('change',syncMgr);mgrMenu.querySelector('.add').before(l);});
+  Object.entries(SEVMAP).sort((a,b)=>a[1]-b[1]).forEach(([nm,d])=>{const o=document.createElement('option');o.value=d;o.textContent=`${nm} (${d}d)`;$('severity').appendChild(o);});
   ROSTER.forEach(([n])=>{const o=document.createElement('option');o.value=n;o.textContent=n;edSel.appendChild(o);});
   buildGaps();buildActions();buildCheckpoints();recompute();
 
@@ -370,7 +410,8 @@ async function loadCase(id){
     if (j.found) {
       const c = j.case.detail || {};
       if (c.editor) { edSel.value = c.editor; const rr=ROSTER.find(x=>x[0]===edSel.value);curLevel=rr?rr[1]:"";$('levelAuto').textContent=curLevel?LL[curLevel]:"—"; }
-      if (c.pip_id) $('pid').value = c.pip_id;
+      if (c.pip_id) { $('pid').value = c.pip_id; updateCaseLink(c.pip_id); }
+      if (c.editor) lastEditor = c.editor;
       if (c.duration_d) $('severity').value = c.duration_d;
       if (c.start_date) $('start').value = c.start_date;
       if (c.result) $('result').value = c.result;
