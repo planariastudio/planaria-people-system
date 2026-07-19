@@ -35,6 +35,10 @@
   select,input[type=text],textarea{font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);width:100%;}
   textarea{min-height:82px;resize:vertical}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .tnote{display:block;margin-top:7px;font-size:12px;line-height:1.45;color:var(--muted)}
+  .tnote b{color:var(--ink)}
+  .tnote.ok{color:#0b6055}
+  .tnote.warn{color:#7c4a06}
   .lvlpill{display:inline-block;margin-top:8px;font-size:11px;font-weight:650;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:99px;padding:3px 10px;text-transform:uppercase;letter-spacing:.04em}
   .val{border:1px solid var(--line);border-radius:12px;padding:15px;margin:12px 0;background:#fff}
   .vname{font-size:14px;font-weight:650}
@@ -81,14 +85,18 @@
   <div class="prog"><div class="ptrack" role="progressbar" aria-label="Appraisal progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="ptrack"><div class="pfill" id="pfill"></div></div>
     <div class="pmeta"><span id="pstep">Step 1</span><span id="ptot"></span></div></div>
   <div class="anon">
-    <div><b>Ratings are pooled once there's more than one response.</b> With only one response so far, the report reflects that single rating directly. Rate honestly.</div></div>
+    <div><b>Your rating is anonymous.</b> Pooled results stay hidden until at least <b>2 peers</b> have responded, so no single rating can be traced back to you. Rate honestly.</div></div>
 
   <div class="card step on" data-step="0">
     <p class="stitle">Who are you rating?</p>
     <p class="sdesc">Pick the peer. Their current level sets the &ldquo;now&rdquo; and &ldquo;next&rdquo; anchors on each value.</p>
     <div class="row2">
-      <div><label class="f">Peer (target)</label><select id="target"><option value="">&mdash; select &mdash;</option></select><div id="tlvl"></div></div>
-      <div><label class="f">Cycle</label><input type="text" id="cycle" maxlength="9"/></div>
+      <div><label class="f">Peer (target)</label><select id="target"><option value="">&mdash; select &mdash;</option></select><div id="tnote"></div><div id="tlvl"></div></div>
+      <div><label class="f">Cycle</label>
+        <div style="display:flex;gap:6px">
+          <select id="cycleQ" style="flex:0 0 82px"><option value="">Q…</option><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select>
+          <input id="cycleY" inputmode="numeric" maxlength="4" placeholder="Year" style="flex:1;min-width:0"/>
+        </div><input type="hidden" id="cycle"/></div>
     </div>
   </div>
 
@@ -115,7 +123,7 @@
       <span>I understand this appraisal is submitted <b>anonymously</b> and my ratings are honest and given in good faith.</span></label>
   </div>
 
-  <div class="law">Peer appraisal is <b>developmental input only</b>. Growth evidence, not a disciplinary record.</div>
+  <div class="law">Peer Appraisal is <b>developmental input only</b>. Growth evidence, not a disciplinary record.</div>
 </div>
 
 <div class="nav"><div class="navin">
@@ -192,7 +200,7 @@ function buildClusterCards(){
 const tgt=document.getElementById('target');
 tgt.onchange=function(){var o=tgt.selectedOptions[0];var changed=state.target&&state.target!==tgt.value;state.target=tgt.value;state.target_id=o?o.dataset.slug:'';state.level=o?o.dataset.lvl:'';
   if(changed)resetRatings(); // never carry one peer's ratings into another's form
-  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span>':'';paintAnchors();validate();};
+  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span> <span class="guide" style="display:inline">&rarr; click <b>Next</b> to rate them across each value.</span>':'';paintAnchors();validate();};
 function resetRatings(){
   state.ratings={};state.track_reco=null;
   document.getElementById('key_strength').value='';document.getElementById('constructive').value='';
@@ -200,9 +208,64 @@ function resetRatings(){
   document.querySelectorAll('.sc.sel').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
   document.querySelectorAll('.trk-opt.sel').forEach(function(x){x.classList.remove('sel');});
 }
-var _cy=document.getElementById('cycle');
-var _now=new Date();var _q=Math.floor(_now.getMonth()/3)+1;_cy.value='Q'+_q+' '+_now.getFullYear();state.cycle=_cy.value;
-_cy.oninput=function(e){var p=e.target.selectionStart;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(p,p);state.cycle=e.target.value;validate();};
+var _cyQ=document.getElementById('cycleQ'),_cyY=document.getElementById('cycleY'),_cyH=document.getElementById('cycle');
+function _composeCycle(){state.cycle=(_cyQ.value&&_cyY.value.length===4)?(_cyQ.value+' '+_cyY.value):'';_cyH.value=state.cycle;validate();}
+(function(){var n=new Date();_cyQ.value='Q'+(Math.floor(n.getMonth()/3)+1);_cyY.value=String(n.getFullYear());_composeCycle();})();
+_cyY.addEventListener('input',function(){_cyY.value=_cyY.value.replace(/\D/g,'').slice(0,4);_composeCycle();loadAssignments();});
+_cyQ.addEventListener('change',function(){_composeCycle();loadAssignments();});
+
+/* ===== assignment-driven target list =====
+   The rater's link identifies them, so the form asks the Worker who they were
+   assigned to rate this cycle and offers only those peers -- already-submitted
+   ones stay listed but disabled, and a single outstanding peer is auto-selected.
+   Falls back to the full roster if assignments can't be resolved, so a Worker
+   hiccup can never lock someone out of rating. */
+var ASSIGN_STATE=null;
+function fillTargets(list,note){
+  var keep=state.target;
+  tgt.length=1;
+  list.forEach(function(p){
+    var o=document.createElement('option');
+    o.value=p.name;o.dataset.lvl=p.level;o.dataset.slug=p.slug||'';
+    o.textContent=p.done?p.name+' — already rated':p.name;
+    if(p.done)o.disabled=true;
+    tgt.appendChild(o);
+  });
+  var el=document.getElementById('tnote');
+  if(el)el.innerHTML=note||'';
+  var open=list.filter(function(p){return !p.done;});
+  if(open.length===1){tgt.value=open[0].name;tgt.onchange();}
+  else if(keep&&list.some(function(p){return p.name===keep&&!p.done;})){tgt.value=keep;}
+  else {tgt.value='';state.target='';state.target_id='';state.level='';document.getElementById('tlvl').innerHTML='';}
+  validate();
+}
+function rosterAll(){return ROSTER.map(function(r){return{name:r[0],level:r[1],slug:r[2],done:false};});}
+function loadAssignments(){
+  if(!RATER_TOKEN||!state.cycle){return Promise.resolve();}
+  var cyc=state.cycle;
+  return fetch(WORKER_URL+'/peer/my-assignments?t='+encodeURIComponent(RATER_TOKEN)+'&cycle='+encodeURIComponent(cyc))
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(cyc!==state.cycle)return;           // a later cycle change already superseded this
+      if(!j||!j.found){fillTargets(rosterAll(),'');return;}
+      ASSIGN_STATE=j;
+      var byName={};ROSTER.forEach(function(r){byName[r[0]]={name:r[0],level:r[1],slug:r[2]};});
+      var list=(j.assignments||[]).map(function(a){
+        var m=byName[a.target]||{name:a.target,level:'',slug:''};
+        return{name:m.name,level:m.level,slug:m.slug,done:a.done};
+      });
+      if(!list.length){
+        fillTargets(rosterAll(),'<span class="tnote warn">No one is assigned to you for <b>'+cyc+'</b> yet — showing everyone. Check the cycle, or ask your admin to set your assignments.</span>');
+        return;
+      }
+      var open=list.filter(function(p){return !p.done;}).length;
+      var note=open===0
+        ? '<span class="tnote ok">All done — you\'ve rated everyone assigned to you for '+cyc+'. Nothing left to fill in.</span>'
+        : '<span class="tnote">Assigned to you for <b>'+cyc+'</b>: '+list.length+' peer'+(list.length===1?'':'s')+' · '+open+' left to rate.</span>';
+      fillTargets(list,note);
+    })
+    .catch(function(){ fillTargets(rosterAll(),''); });
+}
 
 function paintAnchors(){
   var lvl=state.level,idx=LADDER.indexOf(lvl),nextLvl=(idx>=0&&idx<LADDER.length-1)?LADDER[idx+1]:null;
@@ -333,19 +396,37 @@ function showDone(j){
     tgt.value='';state.target='';state.target_id='';state.level='';document.getElementById('tlvl').innerHTML='';
     SUBMITTING=false;var b=document.getElementById('submitBtn');b.disabled=true;b.textContent='Preview & submit';
     cur=0;paintAnchors();paint();window.scrollTo(0,0);
+    loadAssignments(); // the peer just rated is now done -- re-narrow to who's left
   };
 }
 document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});
-loadConfig().then(()=>{
-  if(!RATER_TOKEN){
-    document.body.innerHTML='<div style="padding:60px 40px;font-family:sans-serif;max-width:560px;margin:0 auto;text-align:center">'+
-      '<h2 style="color:#0d9488">Personal link required</h2>'+
-      '<p style="color:#374151;line-height:1.6">This form must be opened using your own peer-appraisal link so your rating is recorded correctly and counted only once per cycle.</p>'+
-      '<p style="color:#6b7280">Check ClickUp for a task assigned to you with your link, or ask your admin.</p></div>';
-    return;
-  }
-  STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();ROSTER.forEach(function(p){var o=document.createElement('option');o.value=p[0];o.dataset.lvl=p[1];o.dataset.slug=p[2]||'';o.textContent=p[0];tgt.appendChild(o);});paint();
-}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
+function bootBanner(msg){
+  var b=document.getElementById('bootBanner');
+  if(!b){b=document.createElement('div');b.id='bootBanner';b.style.cssText='margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;color:#7c4a06;border-radius:10px;font-size:13px;line-height:1.5;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap';document.querySelector('.wrap').prepend(b);}
+  b.innerHTML='<span>'+msg+'</span><button type="button" id="bootRetry" style="border:0;background:#b45309;color:#fff;padding:7px 14px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer">Retry</button>';
+  document.getElementById('bootRetry').onclick=function(){b.remove();boot();};
+}
+function boot(){
+  return loadConfig().then(function(){
+    if(!RATER_TOKEN){
+      document.body.innerHTML='<div style="padding:60px 40px;font-family:sans-serif;max-width:560px;margin:0 auto;text-align:center">'+
+        '<h2 style="color:#0d9488">Personal link required</h2>'+
+        '<p style="color:#374151;line-height:1.6">This form must be opened using your own peer-appraisal link so your rating is recorded correctly and counted only once per cycle.</p>'+
+        '<p style="color:#6b7280">Check ClickUp for a task assigned to you with your link, or ask your admin.</p></div>';
+      return;
+    }
+    if(!CLUSTERS.length){ bootBanner('Config loaded, but the Peer Rubric came back empty — ask your admin to re-sync the Sheet to the Worker.'); return; }
+    var bb=document.getElementById('bootBanner'); if(bb) bb.remove();
+    STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();
+    tgt.length=1; // reset to placeholder before repopulating (safe on retry)
+    // Seed with the full roster so the form is usable immediately, then narrow to
+    // this rater's actual assignments once the Worker answers.
+    fillTargets(rosterAll(),'');
+    paint();
+    loadAssignments();
+  }).catch(function(e){ bootBanner('Couldn’t reach the server — it may be waking up (first load can take ~10s). '+(e&&e.message?'('+e.message+') ':'')); });
+}
+boot();
 </script>
 </body>
 </html>

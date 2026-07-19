@@ -12,7 +12,7 @@
     --lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;
     /* file-local aliases mapped onto the contract */
     --faint:#9aa1ab;--line2:#eef0f2;--accent:var(--kpi);--accent-soft:#eef0fe;
-    --self:#5b6472;--selfbg:#f4f5f7;--spv:var(--kpi);--spvbg:#f2f2fe;
+    --self:#5b6472;--selfbg:#eef0f3;--selfline:#d8dce1;--spv:var(--kpi);--spvbg:#eeecfd;--spvline:#cbc6f7;
     --low:var(--lo);--high:var(--hi);--r:10px;
   }
   *{box-sizing:border-box}html,body{margin:0}
@@ -28,6 +28,7 @@
   .ctx select,.ctx input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;color:var(--ink);background:#fff}
   .ctx select:focus,.ctx input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
   .ctx .auto{padding:9px 10px;background:var(--line2);border-radius:8px;font-weight:600}
+  .qsel{display:flex;gap:6px}.qsel select{flex:0 0 78px}.qsel input{flex:1;min-width:0}
   .supbox{position:relative}
   .supbtn{width:100%;text-align:left;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;cursor:pointer}
   .supbtn.empty{color:var(--faint)}
@@ -55,11 +56,17 @@
   .m .mn{font-weight:700;font-size:16px}
   .m .tg{font-size:13.5px;color:#3b4250;background:var(--accent-soft);border-left:3px solid var(--accent);border-radius:8px;padding:10px 13px;margin:8px 0 14px;line-height:1.5}
   .m .tg b{display:inline-block;color:var(--accent);text-transform:uppercase;font-size:10px;letter-spacing:.07em;font-weight:800;margin-bottom:3px}
-  .panels{display:grid;grid-template-columns:1.25fr 1fr;gap:14px}
-  .panel{border-radius:10px;padding:12px}
-  .panel.self{background:var(--selfbg)} .panel.spv{background:var(--spvbg)}
-  .panel .ph{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:10px}
+  .panels{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+  .panel{border-radius:10px;padding:13px 14px;border:1px solid transparent}
+  .panel.self{background:var(--selfbg);border-color:var(--selfline)}
+  .panel.spv{background:var(--spvbg);border-color:var(--spvline)}
+  .panel .ph{display:flex;align-items:center;gap:7px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;margin-bottom:11px;padding-bottom:9px;border-bottom:1px solid rgba(0,0,0,.06)}
+  .panel .ph::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
   .panel.self .ph{color:var(--self)} .panel.spv .ph{color:var(--spv)}
+  .panel .ph .roflag{margin-left:auto;font-size:9.5px;letter-spacing:.05em;color:var(--faint);background:rgba(0,0,0,.05);border-radius:99px;padding:2px 7px;font-weight:700}
+  .panel.pending{background:transparent;border:1.5px dashed var(--line);display:flex;align-items:center;gap:9px;min-height:100%}
+  .panel.pending .lock{width:26px;height:26px;border-radius:50%;background:var(--line2);color:var(--faint);flex:none;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .panel.pending .ro{color:var(--faint)}
   .fld{margin-bottom:10px}
   .fld label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;margin-bottom:4px}
   .fld textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;min-height:38px;resize:vertical;background:#fff}
@@ -78,7 +85,7 @@
   .ghelp{font-size:12px;color:var(--faint);margin:0 0 5px;line-height:1.4}
   .sumgrid{display:grid;grid-template-columns:120px 1fr 1fr;gap:8px 12px;align-items:start;margin-top:6px}
   .sumgrid .h{font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;padding-top:8px}
-  .sumgrid .h.self{color:var(--self)} .sumgrid .h.spv{color:var(--spv)}
+  .sumgrid .h.self{color:var(--self);border-bottom:2px solid var(--selfline);padding-bottom:6px} .sumgrid .h.spv{color:var(--spv);border-bottom:2px solid var(--spvline);padding-bottom:6px}
   .sumgrid .rlbl{font-size:13px;font-weight:650;padding-top:9px}
   .sumgrid textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;min-height:64px;resize:vertical}
   /* review */
@@ -95,7 +102,9 @@
   .catlist .cr{display:grid;grid-template-columns:1fr 64px 64px;padding:10px 14px;border-top:1px solid var(--line2);font-size:14px;align-items:center}
   .catlist .cr:first-child{border-top:0;background:var(--line2);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
   .catlist .cr .n{text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
-  .catlist .cr .n.s{color:var(--self)} .catlist .cr .n.p{color:var(--spv)}
+  .catlist .cr .n.s,.catlist .cr .n.p{margin:0 2px;border-radius:6px;padding:3px 0}
+  .catlist .cr .n.s{color:var(--self);background:var(--selfbg)} .catlist .cr .n.p{color:var(--spv);background:var(--spvbg)}
+  .catlist .cr:first-child .n.s,.catlist .cr:first-child .n.p{background:none;padding:0}
   .nav{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:12px 18px}
   .nav .inner{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:10px}
   .nav .spacer{flex:1}
@@ -155,12 +164,6 @@
   .gate{max-width:640px;margin:8vh auto 0;text-align:center}
   .gate h1{font-size:26px;letter-spacing:-.02em;margin:0 0 4px}
   .gate p{color:var(--muted);margin:0 0 26px}
-  .gate .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left}
-  .gate .rc{border:1px solid var(--line);border-radius:14px;padding:20px 18px;background:var(--card);cursor:pointer;transition:.14s}
-  .gate .rc:hover{border-color:var(--accent);box-shadow:0 8px 26px rgba(23,25,29,.08);transform:translateY(-1px)}
-  .gate .rc .ico{width:38px;height:38px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;margin-bottom:12px}
-  .gate .rc h3{margin:0 0 4px;font-size:16px}
-  .gate .rc span{font-size:13px;color:var(--muted);line-height:1.45}
   .rflag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);background:var(--accent-soft);padding:4px 9px;border-radius:99px;margin-left:10px;vertical-align:middle}
   .rflag button{border:0;background:none;color:var(--accent);font:inherit;font-size:11px;font-weight:700;cursor:pointer;text-decoration:underline;padding:0}
   .idtag{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}.idtag b{color:var(--ink);font-variant-numeric:tabular-nums}
@@ -168,7 +171,7 @@
   .note.warn{background:#fdf3e8;border-color:#f4d9b0;color:#7c4a06}
   .note b{color:var(--ink)}
   /* read-only editor reference shown to supervisor */
-  .panel.ref{background:var(--selfbg);opacity:1}
+  .panel.ref{background:var(--selfbg);border:1px solid var(--selfline);opacity:1}
   .panel.ref .ph{color:var(--self)}
   .ro{font-size:13px;line-height:1.5}
   .ro .rr{padding:6px 0;border-top:1px solid var(--line2)}.ro .rr:first-child{border-top:0}
@@ -176,17 +179,17 @@
   .rchip{display:inline-block;min-width:24px;text-align:center;color:#fff;border-radius:6px;padding:2px 8px;font-weight:700;font-variant-numeric:tabular-nums}
   .rchip.b12{background:var(--low)}.rchip.b3{background:var(--mid);color:#3d2c00}.rchip.b45{background:var(--high)}.rchip.na{background:var(--faint)}
   .seg.ro button{cursor:default}
-  .suplist{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
-  .supchip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;border:1px solid var(--line);border-radius:99px;padding:5px 11px;background:#fff}
-  .supchip .sv{color:#fff;border-radius:5px;padding:1px 7px;font-weight:700;font-size:11px}
-  .supchip .sv.b12{background:var(--low)}.supchip .sv.b3{background:var(--mid);color:#3d2c00}.supchip .sv.b45{background:var(--high)}
-  .supchip.me{border-color:var(--accent);background:var(--accent-soft)}
+  /* pre-file preview of the exact card that gets filed (see kpi_card.js) */
+  .previewnote{display:flex;align-items:center;gap:9px;background:var(--accent-soft);border:1px solid #d9d5fb;border-radius:10px;padding:11px 14px;font-size:13px;margin-bottom:14px;line-height:1.45}
+  .previewnote b{color:var(--ink)}
+  .kpicard{margin-bottom:4px}
   .done{max-width:600px;margin:6vh auto 0;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:34px 28px}
   .done .big{font-size:40px}.done h2{margin:10px 0 6px;font-size:22px}
   .done p{color:var(--muted);margin:0 0 18px}
-  .linkbox{display:flex;gap:8px;margin:16px 0}
-  .linkbox input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;background:var(--line2)}
 </style>
+<!-- result-card markup + styles, shared with kpi_result_card.html -->
+<script src="kpi_card.js"></script>
+<script>document.write('<style>'+window.KPICARD.css+'</style>');</script>
 </head>
 <body>
 
@@ -211,7 +214,7 @@ const $=id=>document.getElementById(id);
 const LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"};
 const LK=["intern","jr","ve","senior","spv","principal"];
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
-let ROSTER=[], KPI=[], SUPERVISORS=[], CONFIG_VERSION=null;
+let ROSTER=[], KPI=[], SUPERVISORS=[], CONFIG_VERSION=null, MY_IDENTITY=null;
 function bulletsToLine(x){return Array.isArray(x)?x.join(' '):(x||'');}
 async function fetchWithRetry(url,opt,tries=4,delayMs=700){let e;for(let i=0;i<tries;i++){try{const r=await fetch(url,opt);if(!r.ok&&r.status>=500)throw new Error('HTTP '+r.status);return r;}catch(x){e=x;if(i<tries-1)await new Promise(r=>setTimeout(r,delayMs*(i+1)));}}throw e;}
 async function loadConfig(){
@@ -240,93 +243,167 @@ const SGUIDE={"Strengths":"Where this editor is strongest, with evidence.","Area
    STAGE: 'gate' | 'editor' | 'supervisor'
    ED = editor-side snapshot (own input in editor stage, read-only in supervisor stage)
    SP = this supervisor's own input                                                     */
-let STAGE='gate', stepIdx=0, curLevel='', KPICASE=null, caseId='', loadedFromLink=false, mySupName='';
+let STAGE='gate', stepIdx=0, curLevel='', KPICASE=null, caseId='', loadedFromLink=false;
 const ED={self:{},actual:{},selfNote:{},focus:[{area:'',why:''},{area:'',why:''}],sum:{},cats:[],targets:{},level:'',editor:'',quarter:''};
-const SP={spv:{},spvNote:{},foc:[],sum:{}};
+const SP={spv:{},spvNote:{},foc:[],sum:{},extraFocus:[]};
 
 function BAND(v){if(v==null)return'na';if(v<=2.49)return'b12';if(v<3.5)return'b3';return'b45';}
 const fmt=v=>v==null?'—':(+v).toFixed(2);
 function levelIdx(){return LK.indexOf(curLevel);}
 
 /* ===== boot ===== */
-loadConfig().then(()=>{
-  const params=new URLSearchParams(location.search);
-  caseId=params.get('kpi')||'';
-  const wanted=(params.get('role')||'').toLowerCase();
-  if(caseId){ loadedFromLink=true; STAGE='supervisor'; loadCase(caseId).then(startSupervisor); return; }
-  if(wanted==='editor'){enterEditor();return;}
-  if(wanted==='supervisor'){enterSupervisor();return;}
-  renderGate();
-}).catch(e=>{document.body.innerHTML='<p style="padding:40px;font-family:sans-serif;color:#b91c1c">Failed to load config from Worker: '+e.message+'</p>';});
+function bootBanner(msg){
+  var b=document.getElementById('bootBanner');
+  if(!b){b=document.createElement('div');b.id='bootBanner';b.style.cssText='margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;color:#7c4a06;border-radius:10px;font-size:13px;line-height:1.5;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap';document.querySelector('.wrap').prepend(b);}
+  b.innerHTML='<span>'+msg+'</span><button type="button" id="bootRetry" style="border:0;background:#4338ca;color:#fff;padding:7px 14px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer">Retry</button>';
+  document.getElementById('bootRetry').onclick=function(){b.remove();runBoot();};
+}
+function runBoot(){
+  loadConfig().then(async ()=>{
+    const bb=document.getElementById('bootBanner');if(bb)bb.remove();
+    const params=new URLSearchParams(location.search);
+    caseId=params.get('kpi')||'';
+    const editorToken=params.get('e')||'';
+    if(editorToken){
+      try{
+        const r=await fetch(`${WORKER_URL}/whoami?t=${encodeURIComponent(editorToken)}`);
+        const j=await r.json();
+        if(j.found){ MY_IDENTITY={id:j.id,name:j.name,level:LVL_FROM_DB[j.level]||j.level}; enterEditor(); return; }
+      }catch(e){}
+      renderPersonalLinkRequired(); return;
+    }
+    if(caseId){ loadedFromLink=true; STAGE='supervisor'; loadCase(caseId).then(startSupervisor); return; }
+    // No personal token and no case link -> this is a supervisor opening the form
+    // directly. There's no more role choice to make: editors only ever arrive via
+    // their own link (above), so a bare visit always means supervisor.
+    enterSupervisorGated();
+  }).catch(e=>{bootBanner('Couldn’t reach the server — it may be waking up (first load can take ~10s). ('+e.message+')');});
+}
+runBoot();
 
-/* ===== ROLE GATE ===== */
-function renderGate(){
+function renderPersonalLinkRequired(){
+  hideNav();
+  $('ctxHost').innerHTML='';
+  $('stageHost').innerHTML=`<div class="gate">
+    <h1>Personal link required</h1>
+    <p>This form must be opened using your own KPI link, so you can only ever score your own review. Check ClickUp for a task assigned to you with your link, or ask your supervisor.</p>
+  </div>`;
+}
+function enterEditor(){
+  if(!MY_IDENTITY){renderPersonalLinkRequired();return;}
+  STAGE='editor';stepIdx=0;curLevel=MY_IDENTITY.level;buildCtx('editor');showNav();resetEditorScores();maybeEditorId();
+}
+function enterSupervisor(){STAGE='supervisor';stepIdx=0;buildCtx('supervisor');showNav();render();}
+const SPV_PASSWORD='Planaria-admin';
+function enterSupervisorGated(){
+  if(sessionStorage.getItem('kpiSpvOk')==='1'){enterSupervisor();return;}
   hideNav();
   $('stageHost').innerHTML=`<div class="gate">
-    <h1>KPI Scorecard</h1>
-    <p>Choose your role. The editor fills self-scores once and locks them; supervisors then score independently and file the result.</p>
-    <div class="cards">
-      <div class="rc" id="gEditor"><div class="ico">E</div><h3>I'm the editor</h3><span>Rate yourself across the rubric and set your own growth focus. Locks when you're done.</span></div>
-      <div class="rc" id="gSpv"><div class="ico">S</div><h3>I'm a supervisor</h3><span>Score an editor whose self-review is locked. Up to 3 supervisors; any one can file the result.</span></div>
-    </div></div>`;
-  $('gEditor').onclick=enterEditor;
-  $('gSpv').onclick=enterSupervisor;
+    <h1>Supervisor access</h1>
+    <p>Enter the supervisor password to continue.</p>
+    <input type="password" id="spvPass" style="width:100%;max-width:320px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;margin:14px auto 0;display:block">
+    <div id="spvGateErr" class="err" hidden style="margin:8px 0 10px"></div>
+    <button class="btn primary" id="spvGateGo" style="margin-top:14px">Continue</button>
+  </div>`;
+  const go=()=>{
+    if($('spvPass').value===SPV_PASSWORD){sessionStorage.setItem('kpiSpvOk','1');enterSupervisor();}
+    else{$('spvGateErr').textContent='Wrong password.';$('spvGateErr').hidden=false;$('spvPass').value='';$('spvPass').focus();}
+  };
+  $('spvGateGo').onclick=go;
+  $('spvPass').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+  $('spvPass').focus();
 }
-function enterEditor(){STAGE='editor';stepIdx=0;buildCtx('editor');showNav();render();}
-function enterSupervisor(){STAGE='supervisor';stepIdx=0;buildCtx('supervisor');showNav();render();}
+function resetSupervisorPicker(){
+  KPICASE=null;caseId='';loadedFromLink=false;SP.spv={};SP.spvNote={};SP.foc=[];SP.sum={};SP.extraFocus=[];stepIdx=0;
+  buildCtx('supervisor');render();
+}
 
 /* ===== CONTEXT BAR (differs by stage) ===== */
 function buildCtx(stage){
   const roster=ROSTER.map(([n])=>`<option value="${n}">${n}</option>`).join('');
   if(stage==='editor'){
-    $('ctxHost').innerHTML=`<div class="rflag">Editor stage <button type="button" id="switchRole">switch</button></div>
+    $('ctxHost').innerHTML=`<div class="rflag">Editor stage</div>
       <div class="ctx">
-        <div class="f"><label>Your name</label><select id="employee"><option value="">Select…</option>${roster}</select></div>
-        <div class="f"><label>Level</label><div class="auto" id="levelAuto">—</div></div>
-        <div class="f"><label>Quarter</label><input id="quarter" placeholder="Q3 2026" maxlength="9"></div>
+        <div class="f"><label>Your name</label><div class="auto" id="employeeAuto">${MY_IDENTITY.name}</div><input type="hidden" id="employee" value="${MY_IDENTITY.name}"></div>
+        <div class="f"><label>Level</label><div class="auto" id="levelAuto">${LEVEL_LABEL[curLevel]||'—'}</div></div>
+        <div class="f"><label>Quarter</label>${quarterFieldHtml()}<input type="hidden" id="quarter"></div>
         <div class="f"><label>Case ID</label><div class="auto" id="idAuto">—</div></div>
       </div>`;
   }else{
-    const sup=SUPERVISORS.map(s=>`<option value="${s}">${s}</option>`).join('');
-    $('ctxHost').innerHTML=`<div class="rflag">Supervisor stage <button type="button" id="switchRole">switch</button></div>
-      <div class="ctx" style="grid-template-columns:1.2fr .8fr 1.1fr 1fr">
+    $('ctxHost').innerHTML=`<div class="rflag">Supervisor stage<button type="button" class="btn ghost" id="startOverBtn" style="padding:2px 0;margin-left:10px">↺ Start over</button></div>
+      <div class="ctx">
         <div class="f"><label>Editor</label><select id="employee"${loadedFromLink?' disabled':''}><option value="">Select…</option>${roster}</select></div>
-        <div class="f"><label>Quarter</label><input id="quarter" placeholder="Q3 2026" maxlength="9"${loadedFromLink?' disabled':''}></div>
+        <div class="f"><label>Level</label><div class="auto" id="levelAuto">—</div></div>
+        <div class="f"><label>Quarter</label>${quarterFieldHtml(loadedFromLink)}<input type="hidden" id="quarter"></div>
         <div class="f"><label>Case</label><div class="auto" id="idAuto">—</div></div>
-        <div class="f"><label>Scoring as</label><select id="supName"><option value="">Select…</option>${sup}</select></div>
       </div>`;
-    $('supName').addEventListener('change',()=>{mySupName=$('supName').value;});
+    const sob=$('startOverBtn'); if(sob) sob.onclick=resetSupervisorPicker;
   }
-  const sr=$('switchRole'); if(sr) sr.onclick=()=>{resetAll();renderGate();hideNav();};
-  const emp=$('employee');
-  emp.addEventListener('change',()=>{
-    const r=ROSTER.find(x=>x[0]===emp.value);curLevel=r?r[1]:'';
-    if($('levelAuto'))$('levelAuto').textContent=curLevel?LEVEL_LABEL[curLevel]:'—';
-    $('ctxErr').hidden=true;emp.classList.remove('bad');
-    if(stage==='editor'){stepIdx=0;resetEditorScores();maybeEditorId();render();}
-    else{stepIdx=0;findOpenCaseForSpv();}
-  });
-  const q=$('quarter');
-  q.addEventListener('input',()=>{const p=q.selectionStart;q.value=q.value.toUpperCase();q.setSelectionRange(p,p);});
-  q.addEventListener('change',()=>{ if(stage==='editor')maybeEditorId(); else{stepIdx=0;findOpenCaseForSpv();} });
+  if(stage==='supervisor'){
+    const emp=$('employee');
+    emp.addEventListener('change',()=>{
+      const r=ROSTER.find(x=>x[0]===emp.value);curLevel=r?r[1]:'';
+      if($('levelAuto'))$('levelAuto').textContent=curLevel?LEVEL_LABEL[curLevel]:'—';
+      $('ctxErr').hidden=true;emp.classList.remove('bad');
+      stepIdx=0;findOpenCaseForSpv();
+    });
+  }
+  const qq=$('quarterQ'),qy=$('quarterY');
+  const onQ=()=>{ composeQuarter(); if(stage==='editor')maybeEditorId(); else{stepIdx=0;findOpenCaseForSpv();} };
+  qy.addEventListener('input',()=>{qy.value=qy.value.replace(/\D/g,'').slice(0,4);composeQuarter();});
+  qy.addEventListener('change',onQ);
+  qq.addEventListener('change',onQ);
+  if(!loadedFromLink){const n=new Date();qq.value='Q'+(Math.floor(n.getMonth()/3)+1);qy.value=String(n.getFullYear());composeQuarter();}
 }
+/* Quarter = Q1–4 dropdown + manual year, mirrored into hidden #quarter as "Q3 2026". */
+function quarterFieldHtml(disabled){const d=disabled?' disabled':'';return `<div class="qsel">
+    <select id="quarterQ"${d}><option value="">Q…</option><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select>
+    <input id="quarterY" inputmode="numeric" maxlength="4" placeholder="Year"${d}></div>`;}
+function composeQuarter(){const q=$('quarterQ'),y=$('quarterY');if(!q||!y)return;$('quarter').value=(q.value&&y.value.length===4)?`${q.value} ${y.value}`:'';}
+function setQuarter(str){const m=/Q([1-4])\s+(\d{4})/.exec(String(str||''));const q=$('quarterQ'),y=$('quarterY');if(q&&y&&m){q.value='Q'+m[1];y.value=m[2];}if($('quarter'))$('quarter').value=str||'';}
 function slugFor(name){const r=ROSTER.find(x=>x[0]===name);return r?r[2]:'';}
 
-/* ===== EDITOR: auto-id ===== */
+/* ===== EDITOR: auto-id =====
+   One self-review per editor per quarter. Previously this always minted a fresh
+   id via /kpi/next-id and only *warned* if one was already locked -- the warning
+   didn't stop anything, so reopening the personal link (from ClickUp, a second
+   tab, etc.) after locking silently started a second, independently-lockable
+   case. Now: if an open case already exists for this editor+quarter -- locked,
+   or just a draft/admin-placeholder -- it's resumed by id instead of minting a
+   new one. A locked one blocks the form entirely (see renderEditorBlockState). */
+let EDITOR_LOCKED_ELSEWHERE=false, EDITOR_LOCKED_CASE='';
 async function maybeEditorId(){
   if(STAGE!=='editor')return;
   const emp=$('employee').value,q=$('quarter').value.trim();
-  if(!emp||!q){$('idAuto').textContent='—';caseId='';setNote('');return;}
+  if(!emp||!q){$('idAuto').textContent='—';caseId='';setNote('');EDITOR_LOCKED_ELSEWHERE=false;renderEditorBlockState();return;}
   try{
-    const[nr,or]=await Promise.all([
-      fetch(`${WORKER_URL}/kpi/next-id?quarter=${encodeURIComponent(q)}&editor=${encodeURIComponent(slugFor(emp))}`),
-      fetch(`${WORKER_URL}/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`)
-    ]);
-    const j=await nr.json();caseId=j.id||'';$('idAuto').textContent=caseId||'—';
+    const or=await fetch(`${WORKER_URL}/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`);
     const oj=await or.json();
-    if(oj.open&&oj.editor_locked){setNote(`You already locked <b>${oj.id}</b> for ${q} — supervisors are scoring it. Continuing here starts a <b>second</b> case (${caseId}). Only do this deliberately.`,'warn');}
-    else setNote('');
+    if(oj.open&&oj.editor_locked){
+      caseId=oj.id;$('idAuto').textContent=caseId;
+      EDITOR_LOCKED_ELSEWHERE=true;EDITOR_LOCKED_CASE=oj.id;
+      setNote('');renderEditorBlockState();return;
+    }
+    EDITOR_LOCKED_ELSEWHERE=false;
+    if(oj.open){
+      // Resume the existing draft or admin-precreated placeholder -- don't mint a new id.
+      caseId=oj.id;$('idAuto').textContent=caseId;setNote('');
+    }else{
+      const nr=await fetch(`${WORKER_URL}/kpi/next-id?quarter=${encodeURIComponent(q)}&editor=${encodeURIComponent(emp)}`);
+      const j=await nr.json();caseId=j.id||'';$('idAuto').textContent=caseId||'—';setNote('');
+    }
+    renderEditorBlockState();
   }catch(e){$('idAuto').textContent='—';}
+}
+function renderEditorBlockState(){
+  if(STAGE!=='editor')return;
+  if(EDITOR_LOCKED_ELSEWHERE){
+    hideNav();$('progWrap').style.display='none';
+    $('stageHost').innerHTML=`<div class="done"><div class="big">🔒</div><h2>Already submitted</h2>
+      <p>You already locked <b>${EDITOR_LOCKED_CASE}</b> for this quarter — supervisors are scoring it now. One self-review per quarter, so there's nothing left to fill in here.</p></div>`;
+  }else{
+    $('progWrap').style.display='';showNav();render();
+  }
 }
 function resetEditorScores(){ED.self={};ED.actual={};ED.selfNote={};ED.focus=[{area:'',why:''},{area:'',why:''}];ED.sum={};}
 
@@ -341,7 +418,7 @@ async function findOpenCaseForSpv(){
     setNote('');
     if(!oj.open){
       if(oj.last&&oj.last.finalized){setNote(`${oj.last.id} is already filed (official KPI <b>${oj.last.official_kpi}</b>) for ${q}. Nothing left to score — start a new quarter's cycle from the editor side.`,'warn');}
-      else{setNote(`No self-review found for <b>${emp}</b> in <b>${q}</b>. The editor must complete and lock their part first.`,'warn');}
+      else{setNote(`No self-review found for <b>${emp}</b> in <b>${q}</b>. The editor must open their own personal KPI link and lock their part first.`,'warn');}
       $('idAuto').textContent='—';caseId='';KPICASE=null;render();return;
     }
     if(!oj.editor_locked){setNote(`<b>${emp}</b> started ${oj.id} but hasn't locked their self-review yet. Ask them to finish first.`,'warn');$('idAuto').textContent='—';caseId='';KPICASE=null;render();return;}
@@ -362,7 +439,7 @@ function startSupervisor(){
   if(!KPICASE){setNote(`Case <b>${caseId}</b> wasn't found.`,'warn');render();return;}
   if(KPICASE.finalized){setNote(`${KPICASE.id} is already filed (official KPI <b>${KPICASE.official_kpi}</b>).`,'warn');}
   hydrateFromCase(KPICASE);
-  $('employee').value=KPICASE.editor_name;$('quarter').value=KPICASE.quarter;$('idAuto').textContent=KPICASE.id;
+  $('employee').value=KPICASE.editor_name;setQuarter(KPICASE.quarter);$('idAuto').textContent=KPICASE.id;
   render();
 }
 /* map stored editor_data into ED (read-only reference for the supervisor) */
@@ -374,6 +451,7 @@ function hydrateFromCase(c){
   curLevel=c.level;
   // align supervisor focus rows to editor focus count
   SP.foc=ED.focus.map((_,i)=>SP.foc[i]||{action:'',measure:'',priority:''});
+  SP.extraFocus=[]; // don't carry supervisor-added rows from a previously viewed case
   // if config changed, fall back to live KPI names when snapshot absent
   if(!ED.cats.length)ED.cats=KPI.map(c=>({name:c.cat,metrics:c.metrics.map(m=>({name:m[0],target:''}))}));
 }
@@ -416,20 +494,20 @@ function renderCat(ci){
       <div class="tg"><b>Target · ${(STAGE==='supervisor'?LEVEL_LABEL[ED.level]:(li>=0?LEVEL_LABEL[curLevel]:'—'))||'—'}</b><br>${target||'—'}</div>
       <div class="panels">`;
     if(STAGE==='editor'){
-      h+=`<div class="panel self"><div class="ph">Editor (self)</div>
+      h+=`<div class="panel self"><div class="ph">Self</div>
         <div class="fld"><label>Your actual — what you did this quarter</label><textarea data-a="${key}" placeholder="Concrete: projects, numbers, deliverables">${ED.actual[key]||''}</textarea></div>
         <div class="fld"><label>Your rating</label>${segEditable(key,'self')}</div>
         <div class="fld"><label>Your notes</label><textarea data-sn="${key}" placeholder="Context for your score">${ED.selfNote[key]||''}</textarea></div>
       </div>
-      <div class="panel spv" style="opacity:.55"><div class="ph">Supervisor</div><p class="ro" style="color:var(--faint);margin:4px 0 0">Filled independently by your supervisor after you lock.</p></div>`;
+      <div class="panel pending"><div class="lock">🔒</div><p class="ro">Supervisor score<br>filled in after you lock.</p></div>`;
     }else{
-      h+=`<div class="panel ref"><div class="ph">Editor (self) · reference</div>
+      h+=`<div class="panel ref"><div class="ph">Self <span class="roflag">read-only</span></div>
         <div class="ro">
-          <div class="rr"><div class="rk">Self rating</div>${segRO(ED.self[key])}</div>
+          <div class="rr"><div class="rk">Self rating</div>${rchip(ED.self[key])} <span style="color:var(--faint);font-size:12px">their score — not editable</span></div>
           ${ED.actual[key]?`<div class="rr"><div class="rk">Their actual</div>${ED.actual[key]}</div>`:''}
           ${ED.selfNote[key]?`<div class="rr"><div class="rk">Their notes</div>${ED.selfNote[key]}</div>`:''}
         </div></div>
-      <div class="panel spv"><div class="ph">Supervisor — ${mySupName||'your'} score</div>
+      <div class="panel spv"><div class="ph">Supervisor</div>
         <div class="fld"><label>Supervisor rating</label>${segEditable(key,'spv')}</div>
         <div class="fld"><label>Supervisor notes</label><textarea data-pn="${key}" placeholder="Evidence / calibration">${SP.spvNote[key]||''}</textarea></div>
       </div>`;
@@ -445,11 +523,11 @@ function renderReflect(){
     const opts=KPI.map(c=>`<optgroup label="${c.cat}">`+c.metrics.map(m=>`<option>${m[0]}</option>`).join('')+`</optgroup>`).join('');
     let fr='';
     ED.focus.forEach((f,i)=>fr+=`<div class="m"><div class="mn" style="font-size:14px">Focus ${i+1}</div>
-      <div class="panels"><div class="panel self"><div class="ph">You spot it first</div>
+      <div class="panels"><div class="panel self"><div class="ph">Self</div>
         <div class="fld"><label>What you want to grow</label><select data-fa="${i}"><option value="">Select area to grow…</option>${opts}</select></div>
         <div class="fld"><label>Why / context</label><textarea data-fw="${i}" placeholder="Why this matters to you">${f.why||''}</textarea></div>
       </div>
-      <div class="panel spv" style="opacity:.55"><div class="ph">Supervisor — we help</div><p class="ro" style="color:var(--faint);margin:4px 0 0">Your supervisor adds the agreed action, measure, and priority.</p></div>
+      <div class="panel pending"><div class="lock">🔒</div><p class="ro">Supervisor adds the<br>agreed action &amp; priority.</p></div>
       </div></div>`);
     fr+=`<button class="btn ghost" id="addFocus" style="padding-left:0">+ Add focus area</button>`;
     const block=rows=>rows.map((r,i)=>`<div class="fld"><label>${r}</label><div class="ghelp">${EGUIDE[r]}</div><textarea data-sum="e${i}">${ED.sum['e'+i]||''}</textarea></div>`).join('');
@@ -458,22 +536,42 @@ function renderReflect(){
       <h2 style="margin-top:24px;font-size:18px">Your written notes</h2>${block(EDITOR_ROWS)}</div>`;
     wire();$('stageHost').querySelectorAll('[data-fa]').forEach(s=>s.value=ED.focus[+s.dataset.fa].area||'');
   }else{
+    const opts=KPI.map(c=>`<optgroup label="${c.cat}">`+c.metrics.map(m=>`<option>${m[0]}</option>`).join('')+`</optgroup>`).join('');
     let fr='';
     ED.focus.forEach((f,i)=>{const s=SP.foc[i]||(SP.foc[i]={action:'',measure:'',priority:''});
       fr+=`<div class="m"><div class="mn" style="font-size:14px">Focus ${i+1}</div>
-      <div class="panels"><div class="panel ref"><div class="ph">Editor named</div>
+      <div class="panels"><div class="panel ref"><div class="ph">Self <span class="roflag">read-only</span></div>
         <div class="ro"><div class="rr"><div class="rk">Wants to grow</div>${f.area||'—'}</div>${f.why?`<div class="rr"><div class="rk">Why</div>${f.why}</div>`:''}</div>
       </div>
-      <div class="panel spv"><div class="ph">You — how we help</div>
+      <div class="panel spv"><div class="ph">Supervisor</div>
         <div class="fld"><label>Agreed action</label><textarea data-fact="${i}" placeholder="What we'll do to support it">${s.action||''}</textarea></div>
         <div class="fld"><label>How to measure</label><textarea data-fm="${i}" placeholder="Concrete signal of progress">${s.measure||''}</textarea></div>
         <div class="fld"><label>Priority</label><select data-fp="${i}"><option value="">—</option>${PRIO.map(p=>`<option ${s.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
       </div></div></div>`;});
+    // Supervisor-added focus areas -- for growth the editor didn't name themselves.
+    // No "self" side to split against, so this is a single full-width block per row.
+    let exFr='';
+    SP.extraFocus.forEach((f,i)=>{
+      exFr+=`<div class="m"><div class="mn" style="font-size:14px">Supervisor focus ${i+1}
+          <button type="button" class="btn ghost" data-rmex="${i}" style="float:right;padding:2px 4px;font-size:12px">Remove</button></div>
+        <div class="panel spv" style="max-width:640px">
+          <div class="ph">Added by supervisor</div>
+          <div class="fld"><label>Growth area</label><select data-exa="${i}"><option value="">Select area…</option>${opts}</select></div>
+          <div class="fld"><label>Why you're flagging this</label><textarea data-exw="${i}" placeholder="What you're seeing that the editor didn't name">${f.why||''}</textarea></div>
+          <div class="fld"><label>Agreed action</label><textarea data-exact="${i}" placeholder="What we'll do to support it">${f.action||''}</textarea></div>
+          <div class="fld"><label>How to measure</label><textarea data-exm="${i}" placeholder="Concrete signal of progress">${f.measure||''}</textarea></div>
+          <div class="fld"><label>Priority</label><select data-exp="${i}"><option value="">—</option>${PRIO.map(p=>`<option ${f.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+        </div></div>`;
+    });
+    exFr+=`<button class="btn ghost" id="addSupFocus" style="padding-left:0">+ Add a focus area yourself</button>`;
     const block=rows=>rows.map((r,i)=>`<div class="fld"><label>${r}</label><div class="ghelp">${SGUIDE[r]}</div><textarea data-sum="s${i}">${SP.sum['s'+i]||''}</textarea></div>`).join('');
     $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Reflection</div><h2>Support & assessment</h2>
       <p class="hint">Respond to each growth area the editor named, then add your written assessment.</p>${fr}
+      <h2 style="margin-top:24px;font-size:16px">Additional focus areas</h2>
+      <p class="hint">If you see something worth growing that the editor didn't name, add it here.</p>${exFr}
       <h2 style="margin-top:24px;font-size:18px">Supervisor written assessment</h2>${block(SPV_ROWS)}</div>`;
     wire();
+    $('stageHost').querySelectorAll('[data-exa]').forEach(s=>s.value=SP.extraFocus[+s.dataset.exa].area||'');
   }
 }
 
@@ -485,25 +583,20 @@ function renderReview(){
     cats.forEach((c,ci)=>rows+=`<div class="cr"><div>${c.name}</div><div class="n s">${fmt(catAvg(ci,'self'))}</div><div class="n p">·</div></div>`);
     $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Review · editor</div><h2>${$('employee').value||'—'} · ${$('quarter').value||'—'}</h2>
       <div class="idtag">Case <b>${caseId||'—'}</b></div>
-      <div class="hero ${BAND(so)}"><div><div class="big">${fmt(so)}<span class="of"> / 5</span></div><div class="lab">Your self overall</div></div><div class="side">Locks your part. Supervisors score after.</div></div>
+      <div class="hero ${BAND(so)}"><div><div class="big">${fmt(so)}<span class="of"> / 5</span></div><div class="lab">Your self overall</div></div><div class="side">Locks your part. Your supervisor(s) can find and score it directly — no need to send them anything.</div></div>
       <div class="catlist">${rows}</div>
-      <div class="note warn" style="margin-top:14px"><b>Locking is final for your side.</b> You can't edit your self-scores after this — supervisors take over. Share the case link with them (shown after you lock).</div></div>`;
+      <div class="note warn" style="margin-top:14px"><b>Locking is final for your side.</b> You can't edit your self-scores after this — supervisors take over.</div></div>`;
   }else{
-    const myo=overall('spv'),so=overall('self');
-    const existing=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
-    const alreadyMe=existing.find(s=>s.name===mySupName);
-    let chips=existing.map(s=>`<span class="supchip">${s.name} <span class="sv ${BAND(s.overall)}">${fmt(s.overall)}</span></span>`).join('');
-    if(mySupName&&!alreadyMe)chips+=`<span class="supchip me">${mySupName} (you) <span class="sv ${BAND(myo)}">${fmt(myo)}</span></span>`;
-    const willFinal=[...existing.map(s=>+s.overall),...(alreadyMe?[]:[myo])].filter(x=>!isNaN(x)&&x!=null);
-    const proj=willFinal.length?+(willFinal.reduce((a,b)=>a+b,0)/willFinal.length).toFixed(2):null;
-    let rows=`<div class="cr"><div>Category</div><div class="n">Self</div><div class="n">You</div></div>`;
-    cats.forEach((c,ci)=>rows+=`<div class="cr"><div>${c.name}</div><div class="n s">${fmt(catAvg(ci,'self'))}</div><div class="n p">${fmt(catAvg(ci,'spv'))}</div></div>`);
-    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Review · supervisor</div><h2>${ED.editor||$('employee').value||'—'} · ${ED.quarter||$('quarter').value||'—'}</h2>
-      <div class="idtag">Case <b>${caseId||'—'}</b> · editor self <b>${fmt(so)}</b></div>
-      <div class="hero ${BAND(myo)}"><div><div class="big">${fmt(myo)}<span class="of"> / 5</span></div><div class="lab">Your overall</div></div><div class="side">Official KPI = mean of all supervisors${proj!=null?`<br>projected <b>${fmt(proj)}</b> with ${willFinal.length} supervisor${willFinal.length>1?'s':''}`:''}</div></div>
-      <div class="suplist">${chips||'<span class="ro" style="color:var(--faint)">No supervisors submitted yet</span>'}</div>
-      <div class="catlist" style="margin-top:12px">${rows}</div>
-      ${alreadyMe?'<div class="note warn" style="margin-top:12px">You already submitted for this case. You can still file the result if it isn\'t filed yet.</div>':''}</div>`;
+    // Show the real result card -- rendered from the same module the filed card and
+    // the ClickUp PDF use -- so the supervisor approves the actual document before
+    // it goes anywhere, rather than a summary that only resembles it.
+    const already=!!(KPICASE&&KPICASE.finalized);
+    $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Review · supervisor</div><h2>Result card preview</h2>
+      <p class="hint">This is exactly what gets filed to ClickUp and saved as the official record. Check it, then file.</p>
+      <div class="previewnote">${already
+        ? `<span>🔒</span><span><b>Already filed.</b> This case is closed — the card below is the filed record.</span>`
+        : `<span>👁</span><span><b>Not filed yet.</b> Nothing is saved until you press <b>File to ClickUp</b>.</span>`}</div>
+      <div class="kpicard">${window.KPICARD.html(buildPreviewPayload())}</div></div>`;
   }
   wire();
 }
@@ -527,6 +620,13 @@ function wire(){
   host.querySelectorAll('[data-fp]').forEach(s=>s.addEventListener('change',()=>SP.foc[+s.dataset.fp].priority=s.value));
   host.querySelectorAll('[data-sum]').forEach(t=>t.addEventListener('input',()=>{const k=t.dataset.sum;if(k[0]==='e')ED.sum[k]=t.value;else SP.sum[k]=t.value;}));
   const af=host.querySelector('#addFocus');if(af)af.addEventListener('click',()=>{ED.focus.push({area:'',why:''});render();});
+  host.querySelectorAll('[data-exa]').forEach(s=>s.addEventListener('change',()=>SP.extraFocus[+s.dataset.exa].area=s.value));
+  host.querySelectorAll('[data-exw]').forEach(i=>i.addEventListener('input',()=>SP.extraFocus[+i.dataset.exw].why=i.value));
+  host.querySelectorAll('[data-exact]').forEach(i=>i.addEventListener('input',()=>SP.extraFocus[+i.dataset.exact].action=i.value));
+  host.querySelectorAll('[data-exm]').forEach(i=>i.addEventListener('input',()=>SP.extraFocus[+i.dataset.exm].measure=i.value));
+  host.querySelectorAll('[data-exp]').forEach(s=>s.addEventListener('change',()=>SP.extraFocus[+s.dataset.exp].priority=s.value));
+  host.querySelectorAll('[data-rmex]').forEach(b=>b.addEventListener('click',()=>{SP.extraFocus.splice(+b.dataset.rmex,1);render();}));
+  const asf=host.querySelector('#addSupFocus');if(asf)asf.addEventListener('click',()=>{SP.extraFocus.push({area:'',why:'',action:'',measure:'',priority:''});render();});
 }
 
 /* ===== validation ===== */
@@ -558,7 +658,6 @@ $('navInner').addEventListener('click',e=>{const b=e.target.closest('button');if
   case 'btnBack': if(stepIdx>0){stepIdx--;render();scrollTo(0,0);} break;
   case 'btnNext': handleNext(); break;
   case 'rLock': lockEditor(); break;
-  case 'rSubmit': submitSupervisor(); break;
   case 'rFile': fileFinal(); break;
 }});
 function handleNext(){
@@ -566,7 +665,6 @@ function handleNext(){
     if(!$('employee').value){$('ctxErr').textContent='Select an editor to begin.';$('ctxErr').hidden=false;$('employee').classList.add('bad');$('employee').focus();return;}
     if(!$('quarter').value.trim()){$('ctxErr').textContent='Enter the quarter (e.g. Q3 2026).';$('ctxErr').hidden=false;return;}
     if(STAGE==='supervisor'){
-      if(!mySupName){$('ctxErr').textContent='Pick who you are scoring as.';$('ctxErr').hidden=false;return;}
       if(!KPICASE){$('ctxErr').textContent='No open locked case to score — check the editor and quarter above.';$('ctxErr').hidden=false;return;}
     }
   }
@@ -587,11 +685,8 @@ function renderFooter(){
   if(STAGE==='editor'){
     nav.innerHTML=`<button class="btn" id="btnBack">← Back</button><div class="spacer"></div><button class="btn primary" id="rLock">Lock my scores →</button>`;
   }else{
-    const existing=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
-    const alreadyMe=existing.find(s=>s.name===mySupName);
-    const canFile=(existing.length+(alreadyMe?0:1))>=1 && !(KPICASE&&KPICASE.finalized);
+    const canFile=!(KPICASE&&KPICASE.finalized);
     nav.innerHTML=`<button class="btn" id="btnBack">← Back</button><div class="spacer"></div>`+
-      (alreadyMe||(KPICASE&&KPICASE.finalized)?'':`<button class="btn" id="rSubmit">Submit my scores</button>`)+
       (canFile?`<button class="btn primary" id="rFile">File to ClickUp</button>`:'');
   }
 }
@@ -614,55 +709,36 @@ async function lockEditor(){
     showDone('editor',payload.id);
   }catch(e){b.disabled=false;b.textContent='Lock my scores →';alert('Failed to lock: '+e.message);}
 }
-async function submitSupervisor(){
-  const b=$('rSubmit');b.disabled=true;b.textContent='Submitting…';
-  const sd={spv:SP.spv,spvNote:SP.spvNote,foc:SP.foc,sum:SP.sum};
-  try{
-    const r=await fetch(`${WORKER_URL}/kpi/supervisor`,{method:'POST',headers:{'content-type':'application/json'},
-      body:JSON.stringify({id:caseId,supervisor_name:mySupName,supervisor_data:sd,supervisor_overall:overall('spv')})});
-    const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
-    await loadCase(caseId);hydrateFromCase(KPICASE);render();
-    alert(`Your scores are recorded (${j.supervisor_count} supervisor${j.supervisor_count>1?'s':''} so far). File the result when ready.`);
-  }catch(e){b.disabled=false;b.textContent='Submit my scores';alert('Failed: '+e.message);}
-}
 function buildFinalCategories(){
-  // spv per metric = mean across all submitted supervisors (incl. me if not yet stored)
-  const stored=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
-  const allSpv=stored.map(s=>(s.data&&s.data.spv)||{});
-  if(!stored.find(s=>s.name===mySupName))allSpv.push(SP.spv);
-  const meanAt=key=>{const vs=allSpv.map(o=>o[key]).filter(x=>x!=null);return vs.length?+(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(2):null;};
-  const meStored=!!stored.find(s=>s.name===mySupName);
-  const multi=stored.length+(meStored?0:1)>1;
-  const noteAt=key=>{const parts=[];
-    stored.forEach(s=>{const n=s.data&&s.data.spvNote&&s.data.spvNote[key];if(n)parts.push(multi?`${s.name}: ${n}`:n);});
-    if(!meStored){const n=SP.spvNote[key];if(n)parts.push(multi?`${mySupName}: ${n}`:n);}
-    return parts.join(' · ');};
   return ED.cats.map((c,ci)=>{
-    const metrics=c.metrics.map((m,mi)=>{const k=`${ci}-${mi}`;return{metric:m.name,target:ED.targets[k]||m.target||'',self:ED.self[k]??null,spv:meanAt(k),spv_note:noteAt(k)};});
+    const metrics=c.metrics.map((m,mi)=>{const k=`${ci}-${mi}`;return{metric:m.name,target:ED.targets[k]||m.target||'',
+      self:ED.self[k]??null,self_actual:ED.actual[k]||'',self_note:ED.selfNote[k]||'',
+      spv:SP.spv[k]??null,spv_note:SP.spvNote[k]||''};});
     const selfAvg=metrics.map(m=>m.self).filter(x=>x!=null);const spvAvg=metrics.map(m=>m.spv).filter(x=>x!=null);
     return{name:c.name,metrics,self:selfAvg.length?+(selfAvg.reduce((a,b)=>a+b)/selfAvg.length).toFixed(2):null,spv:spvAvg.length?+(spvAvg.reduce((a,b)=>a+b)/spvAvg.length).toFixed(2):null};
   });
 }
 function buildFinalFocus(){
-  const stored=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
-  const firstSpvFoc=(stored.find(s=>s.data&&s.data.foc)||{}).data?.foc || SP.foc;
-  return ED.focus.map((f,i)=>{const s=(firstSpvFoc&&firstSpvFoc[i])||SP.foc[i]||{};return{area:f.area,why:f.why,action:s.action||'',measure:s.measure||'',priority:s.priority||''};});
+  const fromEditor=ED.focus.map((f,i)=>{const s=SP.foc[i]||{};return{area:f.area,why:f.why,action:s.action||'',measure:s.measure||'',priority:s.priority||'',source:'editor'};});
+  const fromSpv=SP.extraFocus.filter(f=>f.area).map(f=>({area:f.area,why:f.why||'',action:f.action||'',measure:f.measure||'',priority:f.priority||'',source:'supervisor'}));
+  return [...fromEditor,...fromSpv];
+}
+// Mirrors the payload the worker stores as kpi_case.detail (and renders the PDF
+// from), built with the same builders fileFinal() posts -- so the preview and the
+// filed card are the same document, not two versions of it.
+function buildPreviewPayload(){
+  return {id:caseId,editor:ED.editor||$('employee').value||'',
+    level:LEVEL_LABEL[ED.level]||ED.level||'',
+    quarter:ED.quarter||$('quarter').value||'',
+    supervisor:'Supervisor',official_kpi:overall('spv'),self_overall:overall('self'),
+    categories:buildFinalCategories(),focus:buildFinalFocus()};
 }
 async function fileFinal(){
-  if(!confirm(`File the KPI result for ${ED.editor}?\n\nOfficial KPI = mean of all submitted supervisors. This creates the ClickUp report PDF.`))return;
+  if(!confirm(`File the KPI result for ${ED.editor}?\n\nThis creates the ClickUp report PDF and closes the case.`))return;
   const b=$('rFile');b.disabled=true;b.textContent='Filing…';
-  const payload={id:caseId,supervisor:[...new Set([...( (KPICASE.supervisors||[]).map(s=>s.name)),mySupName])].join(' & '),
+  const payload={id:caseId,supervisor:'Supervisor',official_kpi:overall('spv'),
     categories:buildFinalCategories(),focus:buildFinalFocus()};
   try{
-    // ensure my scores are stored first if not yet
-    const stored=(KPICASE&&Array.isArray(KPICASE.supervisors))?KPICASE.supervisors:[];
-    if(!stored.find(s=>s.name===mySupName)){
-      const sr=await fetch(`${WORKER_URL}/kpi/supervisor`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:caseId,supervisor_name:mySupName,supervisor_data:{spv:SP.spv,spvNote:SP.spvNote,foc:SP.foc,sum:SP.sum},supervisor_overall:overall('spv')})});
-      const sj=await sr.json();if(!sr.ok&&sr.status!==409)throw new Error(sj.error||('HTTP '+sr.status));
-      await loadCase(caseId);
-      payload.categories=buildFinalCategories();payload.focus=buildFinalFocus();
-      payload.supervisor=[...new Set((KPICASE.supervisors||[]).map(s=>s.name))].join(' & ');
-    }
     const r=await fetch(`${WORKER_URL}/kpi/finalize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
     showDone('filed',caseId,j);
@@ -672,24 +748,20 @@ async function fileFinal(){
 /* ===== done screens ===== */
 function showDone(kind,id,j){
   hideNav();
-  const link=`${location.origin}${location.pathname}?kpi=${encodeURIComponent(id)}`;
   if(kind==='editor'){
     $('stageHost').innerHTML=`<div class="done"><div class="big">🔒</div><h2>Self-review locked</h2>
-      <p>Your part of <b>${id}</b> is saved. Supervisors score independently, then file the result.</p>
-      <div class="linkbox"><input id="shareLink" readonly value="${link}"><button class="btn" id="copyLink">Copy</button></div>
-      <p class="hint">Send this link to your supervisor(s) — it opens straight into supervisor scoring for your case.</p></div>`;
+      <p>Your part of <b>${id}</b> is saved. Your supervisor(s) can find and score it directly from the supervisor stage — you don't need to send them anything.</p></div>`;
   }else{
-    $('stageHost').innerHTML=`<div class="done"><div class="big">✓</div><h2>KPI filed</h2>
-      <p>Official KPI <b>${j&&j.official_kpi!=null?j.official_kpi:'—'}</b> · ${j&&j.supervisor_count||'?'} supervisor(s). Report PDF attached to ClickUp${j&&j.clickup_task_id?` (task ${j.clickup_task_id})`:''}.</p>
-      <div class="linkbox"><input id="shareLink" readonly value="${link}"><button class="btn" id="copyLink">Copy case link</button></div></div>`;
+    // Land straight on the rendered result card (with Save as PDF built in) instead
+    // of a plain text confirmation -- that's the thing a supervisor actually wants
+    // to see right after filing.
+    location.href=`kpi_result_card.html?kpi=${encodeURIComponent(id)}`;
   }
-  const cp=$('copyLink');if(cp)cp.onclick=async()=>{const i=$('shareLink');try{await navigator.clipboard.writeText(i.value);}catch(e){i.select();document.execCommand('copy');}cp.textContent='Copied ✓';setTimeout(()=>cp.textContent=kind==='editor'?'Copy':'Copy case link',1500);};
 }
 
 /* ===== helpers ===== */
 function showNav(){$('navbar').style.display='block';}
 function hideNav(){$('navbar').style.display='none';}
-function resetAll(){STAGE='gate';stepIdx=0;curLevel='';KPICASE=null;caseId='';loadedFromLink=false;mySupName='';resetEditorScores();SP.spv={};SP.spvNote={};SP.foc=[];SP.sum={};$('ctxHost').innerHTML='';$('ctxErr').hidden=true;}
 
 </script>
 </body>

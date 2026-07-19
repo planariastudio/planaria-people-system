@@ -19879,10 +19879,10 @@ var { connect, history, launch, limits, sessions, acquire } = puppeteer;
 var puppeteer_cloudflare_default = puppeteer;
 
 // src/index.js
-var MIN_N = 1;
+var MIN_N = 2;
 var CORS = {
   "Access-Control-Allow-Origin": "https://planariastudio.github.io",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type"
 };
 function json(data, status = 200) {
@@ -19935,6 +19935,28 @@ async function sbUpsert(env, table, row, onConflict) {
   return res.json();
 }
 __name(sbUpsert, "sbUpsert");
+// Insert a row whose primary key is minted from a read-max-then-write counter
+// (nextKpiId / nextPipId), retrying on a unique-violation so two concurrent
+// first-time creates can't collide. The old path used sbUpsert with
+// merge-duplicates, which on a PK clash SILENTLY MERGED the loser's payload onto
+// the winner's row instead of failing -- data loss with no error. Here each
+// attempt re-mints the id and does a plain insert; a 409 (Postgres 23505) means
+// someone else took that id, so we mint the next one and retry.
+async function sbInsertMinted(env, table, mintId, buildRow, tries = 5) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    const id = await mintId();
+    try {
+      const rows = await sbInsert(env, table, buildRow(id));
+      return { id, rows };
+    } catch (e) {
+      lastErr = e;
+      if (!/\b409\b|23505|duplicate key|already exists/i.test(String(e.message))) throw e;
+    }
+  }
+  throw lastErr;
+}
+__name(sbInsertMinted, "sbInsertMinted");
 async function sbPatch(env, table, query, patch) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}${query}`, {
     method: "PATCH",
@@ -19944,6 +19966,14 @@ async function sbPatch(env, table, query, patch) {
   if (!res.ok) throw new Error(`Supabase patch ${table} failed: ${res.status} ${await res.text()}`);
 }
 __name(sbPatch, "sbPatch");
+async function sbDelete(env, table, query) {
+  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}${query}`, {
+    method: "DELETE",
+    headers: sbHeaders(env, { Prefer: "return=minimal" })
+  });
+  if (!res.ok) throw new Error(`Supabase delete ${table} failed: ${res.status} ${await res.text()}`);
+}
+__name(sbDelete, "sbDelete");
 async function clickupCreateTask(env, name) {
   const res = await fetch(`https://api.clickup.com/api/v2/list/${env.CLICKUP_LIST_ID}/task`, {
     method: "POST",
@@ -19983,6 +20013,42 @@ async function clickupCreateFolder(env, name) {
   return res.json();
 }
 __name(clickupCreateFolder, "clickupCreateFolder");
+async function clickupFindFolderByName(env, name) {
+  const res = await fetch(`https://api.clickup.com/api/v2/space/${env.CLICKUP_SPACE_ID}/folder?archived=false`, {
+    headers: { Authorization: env.CLICKUP_TOKEN }
+  });
+  if (!res.ok) return null;
+  const j = await res.json();
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  return (j.folders || []).find((f) => norm(f.name) === norm(name)) || null;
+}
+__name(clickupFindFolderByName, "clickupFindFolderByName");
+// ClickUp rejects a duplicate folder name outright (CAT_014) instead of returning
+// the existing one, so a blind create fails whenever the folder already exists --
+// whether from a prior successful run whose Supabase write never landed, or one
+// set up by hand before this automation existed. Look it up first and reuse it.
+async function clickupGetOrCreateFolder(env, name) {
+  const existing = await clickupFindFolderByName(env, name);
+  if (existing) return existing;
+  try {
+    return await clickupCreateFolder(env, name);
+  } catch (e) {
+    if (!/Folder name taken|CAT_014/.test(e.message)) throw e;
+    const retry = await clickupFindFolderByName(env, name);
+    if (retry) return retry;
+    throw e;
+  }
+}
+__name(clickupGetOrCreateFolder, "clickupGetOrCreateFolder");
+async function clickupListsInFolder(env, folderId) {
+  const res = await fetch(`https://api.clickup.com/api/v2/folder/${folderId}/list?archived=false`, {
+    headers: { Authorization: env.CLICKUP_TOKEN }
+  });
+  if (!res.ok) return [];
+  const j = await res.json();
+  return j.lists || [];
+}
+__name(clickupListsInFolder, "clickupListsInFolder");
 async function clickupCreateList(env, folderId, name) {
   const res = await fetch(`https://api.clickup.com/api/v2/folder/${folderId}/list`, {
     method: "POST",
@@ -19993,6 +20059,26 @@ async function clickupCreateList(env, folderId, name) {
   return res.json();
 }
 __name(clickupCreateList, "clickupCreateList");
+// Mirror a task into a second list / remove that mirror. Both need the
+// "Tasks in Multiple Lists" ClickApp enabled on the workspace; when it's off,
+// ClickUp rejects the call and we deliberately swallow it -- the task simply
+// stays only in its home list, which is the pre-mirroring behaviour.
+async function clickupAddTaskToList(env, listId, taskId) {
+  try {
+    await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
+      method: "POST", headers: { Authorization: env.CLICKUP_TOKEN }
+    });
+  } catch (e) {}
+}
+__name(clickupAddTaskToList, "clickupAddTaskToList");
+async function clickupRemoveTaskFromList(env, listId, taskId) {
+  try {
+    await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
+      method: "DELETE", headers: { Authorization: env.CLICKUP_TOKEN }
+    });
+  } catch (e) {}
+}
+__name(clickupRemoveTaskFromList, "clickupRemoveTaskFromList");
 async function clickupCreateTaskInList(env, listId, name, opts = {}) {
   const payload = { name };
   if (opts.markdown_description) payload.markdown_description = opts.markdown_description;
@@ -20032,18 +20118,30 @@ function quarterRange(q) {
   const end = Date.UTC(y, qn * 3, 0, 23, 59, 0);
   const ny = qn === 4 ? y + 1 : y, nq = qn === 4 ? 1 : qn + 1;
   const nextEnd = Date.UTC(ny, nq * 3, 0, 23, 59, 0);
-  return { start, end, nextEnd, tag: `${y}-q${qn}` };
+  return { start, end, nextEnd, tag: `Q${qn}-${y}` };
 }
 __name(quarterRange, "quarterRange");
 function quarterFromPipId(id) {
-  const m = /^PIP-(\d{4})Q([1-4])-/.exec(String(id || ""));
+  const m = /^PIP-(\d{4})-Q([1-4])-/.exec(String(id || ""));
   return m ? `Q${m[2]} ${m[1]}` : null;
 }
 __name(quarterFromPipId, "quarterFromPipId");
+// ===== canonical case-ID tokens (shared by KPI + PIP) =====
+// Quarter -> "2026-Q2" (accepts "Q2 2026", "2026 Q2", "2026-Q2", "Q2-2026").
+function quarterToken(q) {
+  const s = String(q || "");
+  const qm = s.match(/Q\s*-?\s*([1-4])/i), ym = s.match(/(20\d{2})/);
+  return qm && ym ? `${ym[1]}-Q${qm[1]}` : s.trim().replace(/\s+/g, "-");
+}
+__name(quarterToken, "quarterToken");
+// Name -> first two words, each capitalized, hyphen-joined: "Fitra Pratama" -> "Fitra-Pratama".
+function nameToken(name) {
+  const parts = String(name || "").trim().split(/\s+/).slice(0, 2).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  return parts.join("-") || "Unknown";
+}
+__name(nameToken, "nameToken");
 function bandPriority(score) { if (score == null) return null; return score < 2.5 ? 2 : score < 3.5 ? 3 : 4; }
 __name(bandPriority, "bandPriority");
-function bandTag(score) { if (score == null) return null; return score < 2.5 ? "score-lo" : score < 3.5 ? "score-mid" : "score-hi"; }
-__name(bandTag, "bandTag");
 var FOCUS_PRIO = { High: 2, Medium: 3, Low: 4 };
 var PAGES_BASE = "https://planariastudio.github.io/planaria-people-system";
 var CLICKUP_MEMBER_CACHE = null;
@@ -20074,16 +20172,38 @@ async function resolveEditorList(env, editorId, editorName, type) {
   let rows = await sbSelect(env, "clickup_map", `?editor_id=eq.${encodeURIComponent(key)}&select=*`);
   let map = rows[0];
   if (!map || !map.folder_id) {
-    const folder = await clickupCreateFolder(env, editorName);
-    const kpiList = await clickupCreateList(env, folder.id, "KPI");
-    const peerList = await clickupCreateList(env, folder.id, "Peer");
-    const pipList = await clickupCreateList(env, folder.id, "PIP");
+    const folder = await clickupGetOrCreateFolder(env, editorName);
+    const existingLists = await clickupListsInFolder(env, folder.id);
+    const findOrCreate = async (name) => {
+      const norm = (s) => String(s || "").trim().toLowerCase();
+      const hit = existingLists.find((l) => norm(l.name) === norm(name));
+      return hit || await clickupCreateList(env, folder.id, name);
+    };
+    const kpiList = await findOrCreate("KPI");
+    const peerList = await findOrCreate("Peer");
+    const pipList = await findOrCreate("PIP");
+    const todoList = await findOrCreate("To-do");
     map = {
       editor_id: key, editor_name: editorName, folder_id: folder.id,
       kpi_list_id: kpiList.id, peer_list_id: peerList.id, pip_list_id: pipList.id
     };
     await sbUpsert(env, "clickup_map", map, "editor_id");
+    map.todo_list_id = todoList.id;
+    // Persisted separately so a missing todo_list_id column (SQL not run yet)
+    // can only lose the cache, never break folder/list creation itself.
+    try { await sbPatch(env, "clickup_map", `?editor_id=eq.${encodeURIComponent(key)}`, { todo_list_id: todoList.id }); } catch (e) {}
+  } else if (!map.todo_list_id) {
+    // Folder mapped before the To-do list existed -- find or create it now.
+    try {
+      const lists = await clickupListsInFolder(env, map.folder_id);
+      const norm = (s) => String(s || "").trim().toLowerCase();
+      const hit = lists.find((l) => norm(l.name) === "to-do");
+      const todo = hit || await clickupCreateList(env, map.folder_id, "To-do");
+      map.todo_list_id = todo.id;
+      try { await sbPatch(env, "clickup_map", `?editor_id=eq.${encodeURIComponent(key)}`, { todo_list_id: todo.id }); } catch (e) {}
+    } catch (e) {}
   }
+  if (type === "todo") return map.todo_list_id || null;
   return type === "kpi" ? map.kpi_list_id : type === "peer" ? map.peer_list_id : map.pip_list_id;
 }
 __name(resolveEditorList, "resolveEditorList");
@@ -20109,31 +20229,52 @@ async function renderPdf(env, html) {
 }
 __name(renderPdf, "renderPdf");
 var esc = /* @__PURE__ */ __name((s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]), "esc");
-var band = /* @__PURE__ */ __name((s) => s < 3 ? "lo" : s < 3.5 ? "mid" : "hi", "band");
-var BAND_COLORS = { lo: "#e0603b", mid: "#9ca3af", hi: "#2f9e7e" };
+// Thresholds and colours must stay identical to the browser-side cards
+// (kpi_result_card.html / kpi_scorecard.html), or the same score renders a
+// different band in the PDF than the form the score was entered in.
+var band = /* @__PURE__ */ __name((s) => s == null ? "na" : s < 2.5 ? "lo" : s < 3.5 ? "mid" : "hi", "band");
+var BAND_COLORS = { lo: "#e0603b", mid: "#e3a008", hi: "#2f9e7e", na: "#6b7280" };
+var f2 = /* @__PURE__ */ __name((v) => v == null ? "—" : (+v).toFixed(2), "f2");
 function kpiResultCardHtml(p) {
-  const catRows = p.categories.map((c) => {
-    const rows = c.metrics.map(
-      (m) => `<tr><td class="mn">${esc(m.metric)}</td>
-            <td class="sc"><span class="chip ${band(m.self)}">${m.self}</span></td>
-            <td class="sc"><span class="chip ${band(m.spv)}">${m.spv}</span></td>
-            <td class="nt">${esc(m.spv_note || "")}</td></tr>`
-    ).join("");
+  const catRows = (p.categories || []).map((c) => {
+    const mrows = (c.metrics || []).map((m) => {
+      const hasSelf = m.self != null || m.self_actual || m.self_note;
+      const selfBody = hasSelf
+        ? (m.self_actual ? `<div class="mp-line"><span class="mp-k">Actual</span>${esc(m.self_actual)}</div>` : "") + (m.self_note ? `<div class="mp-line"><span class="mp-k">Notes</span>${esc(m.self_note)}</div>` : "") + (!m.self_actual && !m.self_note ? `<div class="mp-empty">Rated, no written notes.</div>` : "")
+        : `<div class="mp-empty">No self-assessment submitted.</div>`;
+      const spvBody = m.spv_note ? `<div class="mp-line"><span class="mp-k">Note</span>${esc(m.spv_note)}</div>` : `<div class="mp-empty">No note added.</div>`;
+      const targetBox = m.target ? `<div class="mtg"><span class="mtg-k">What was expected${p.level ? " \xB7 " + esc(p.level) : ""}</span>${esc(m.target)}</div>` : "";
+      return `<div class="mrow">
+        <div class="mrow-h"><div class="mname">${esc(m.metric)}</div>
+        <div class="mscores"><span class="chip self">${m.self ?? "—"}</span><span class="chip official ${band(m.spv)}">${m.spv ?? "—"}</span></div></div>
+        ${targetBox}
+        <div class="mpanels">
+        <div class="mp self"><div class="mp-h">Self</div>${selfBody}</div>
+        <div class="mp spv"><div class="mp-h">Supervisor</div>${spvBody}</div>
+        </div></div>`;
+    }).join("");
+    const pct = c.spv != null ? Math.round(c.spv / 5 * 100) : 0;
     return `<div class="cat">
         <div class="cathd"><div class="catname">${esc(c.name)}</div>
-        <div class="catscores"><span class="mut">self</span> <span class="chip ${band(c.self)}">${c.self}</span>
-        <span class="mut">supervisor</span> <span class="chip ${band(c.spv)}">${c.spv}</span></div></div>
-        <table class="mtable"><thead><tr><th>Metric</th><th>Self</th><th>Spv</th><th>Note</th></tr></thead>
-        <tbody>${rows}</tbody></table></div>`;
+        <div class="catscores"><span class="mut">self</span> <span class="chip self">${f2(c.self)}</span>
+        <span class="mut">supervisor</span> <span class="chip official ${band(c.spv)}">${f2(c.spv)}</span></div></div>
+        <div class="bar"><div class="fill ${band(c.spv)}" style="width:${pct}%"></div></div>
+        ${mrows}</div>`;
   }).join("");
-  const focusRows = (p.focus || []).map(
-    (f) => `<div class="frow"><div class="farea">${esc(f.area)}<span class="pri ${String(f.priority).toLowerCase()}">${esc(f.priority)}</span></div>
-      <div class="fgrid"><div><span class="k">Why</span>${esc(f.why)}</div>
-      <div><span class="k">Agreed action</span>${esc(f.action)}</div>
-      <div><span class="k">How we measure</span>${esc(f.measure)}</div></div></div>`
-  ).join("");
+  const focusRows = (p.focus || []).filter((f) => f && f.area).map(
+    (f) => `<div class="frow"><div class="farea">${esc(f.area)}${f.source === "supervisor" ? `<span class="src-spv">Added by supervisor</span>` : ""}${f.priority ? `<span class="pri ${String(f.priority).toLowerCase()}">${esc(f.priority)}</span>` : ""}</div>
+      <div class="fgrid"><div><span class="k">Why</span>${esc(f.why || "—")}</div>
+      <div><span class="k">Agreed action</span>${esc(f.action || "—")}</div>
+      <div><span class="k">How we measure</span>${esc(f.measure || "—")}</div></div></div>`
+  ).join("") || `<p style="color:#6b7280;font-size:12px">No focus areas recorded.</p>`;
+  const gapVal = p.self_overall != null && p.official_kpi != null ? p.self_overall - p.official_kpi : null;
+  const gapHtml = p.self_overall == null ? "" : `<div class="section"><div class="calib">
+    <div class="c spv">Official (supervisor) <b>${f2(p.official_kpi)}</b></div>
+    <div class="c self">Self-assessment <b>${f2(p.self_overall)}</b></div>
+    ${gapVal != null ? `<div class="c gap">Calibration gap <b>${(gapVal >= 0 ? "+" : "") + f2(gapVal)}</b></div>` : ""}
+  </div></div>`;
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  :root{--canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;--kpi:#4f46e5;--lo:#e0603b;--mid:#9ca3af;--hi:#2f9e7e;}
+  :root{--canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;--kpi:#4f46e5;--pip:#b45309;--lo:#e0603b;--mid:#e3a008;--hi:#2f9e7e;}
   *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5}
   .wrap{max-width:760px;margin:0 auto;padding:20px}
   .head{padding:0 0 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
@@ -20141,63 +20282,250 @@ function kpiResultCardHtml(p) {
   h1{font-size:20px;margin:6px 0 0}.meta{font-size:12px;color:var(--muted);margin-top:4px}
   .official{text-align:right}.official .big{font-size:34px;font-weight:800;color:${BAND_COLORS[band(p.official_kpi)]}}
   .official .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .official .sub{font-size:10px;color:var(--muted);font-weight:600;margin-top:2px}
   .section{padding:16px 0;border-bottom:1px solid var(--line)}
   .stitle{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
-  .chip{display:inline-block;min-width:20px;text-align:center;color:#fff;border-radius:5px;padding:1px 6px;font-weight:700;font-size:11px}
-  .chip.lo{background:var(--lo)}.chip.mid{background:var(--mid)}.chip.hi{background:var(--hi)}
+  .calib{display:flex;gap:14px;align-items:center;background:#fafafb;border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+  .calib .c{font-size:12px;color:var(--muted);padding-right:14px;border-right:1px solid var(--line)}
+  .calib .c:last-child{border-right:0;padding-right:0}
+  .calib .c b{color:var(--ink)}.calib .c.spv b{color:var(--kpi)}.calib .c.self b{color:#5b6472}.calib .c.gap b{color:var(--pip)}
+  /* self = calibration only -> quiet outline; official = KPI of record -> solid band colour */
+  .chip{display:inline-block;min-width:20px;text-align:center;border-radius:5px;padding:1px 6px;font-weight:700;font-size:11px}
+  .chip.self{background:#fff;color:#5b6472;border:1px solid #d8dce1}
+  .chip.official{color:#fff;border:1px solid transparent}
+  .chip.official.lo{background:var(--lo)}.chip.official.mid{background:var(--mid);color:#3d2c00}.chip.official.hi{background:var(--hi)}
+  .chip.official.na{background:var(--muted)}
+  .scorekey{display:flex;gap:12px;align-items:center;font-size:10px;color:var(--muted);margin-bottom:10px}
+  .scorekey span{display:inline-flex;align-items:center;gap:5px}
+  .scorekey i{width:8px;height:8px;border-radius:2px;display:inline-block}
+  .scorekey i.k-self{background:#fff;border:1px solid #d8dce1}.scorekey i.k-spv{background:var(--kpi)}
   .cat{margin-bottom:14px}.cathd{display:flex;justify-content:space-between;margin-bottom:4px}
   .catname{font-weight:650;font-size:13px}.mut{color:var(--muted);margin:0 4px}
-  .mtable{width:100%;border-collapse:collapse;font-size:11.5px}
-  .mtable th{text-align:left;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line)}
-  .mtable td{padding:5px 6px;border-bottom:1px solid #f1f2f4}
+  .bar{height:7px;background:#eef0f2;border-radius:99px;overflow:hidden;margin-bottom:8px}
+  .fill{height:100%;border-radius:99px}.fill.lo{background:var(--lo)}.fill.mid{background:var(--mid)}.fill.hi{background:var(--hi)}.fill.na{background:var(--muted)}
+  /* per-metric self-vs-supervisor comparison -- same visual language as the
+     scorecard form itself (self = quiet slate, supervisor = indigo tint) */
+  .mrow{border:1px solid var(--line);border-radius:8px;padding:11px 13px;margin-bottom:9px}
+  .mrow-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .mname{font-weight:700;font-size:12.5px}
+  .mscores{display:flex;gap:5px}
+  .mtg{font-size:11px;color:#3b4250;background:var(--accent-soft,#eef0fe);border-left:3px solid var(--kpi);border-radius:5px;padding:6px 9px;margin-bottom:9px;line-height:1.45}
+  .mtg-k{display:block;color:var(--kpi);text-transform:uppercase;font-size:8.5px;letter-spacing:.06em;font-weight:800;margin-bottom:2px}
+  .mpanels{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .mp{border-radius:6px;padding:8px 10px;font-size:11px;line-height:1.5}
+  .mp.self{background:#f4f5f7;border:1px solid #e2e5e9}
+  .mp.spv{background:#f6f5fe;border:1px solid #e6e3fb}
+  .mp-h{font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px}
+  .mp.self .mp-h{color:#5b6472}
+  .mp.spv .mp-h{color:var(--kpi)}
+  .mp-line{margin-bottom:3px}
+  .mp-line:last-child{margin-bottom:0}
+  .mp-k{display:block;font-size:8.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:1px}
+  .mp-empty{color:var(--muted);font-style:italic}
   .frow{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}
   .farea{font-weight:650;font-size:12.5px;margin-bottom:6px}
   .pri{font-size:9px;font-weight:700;text-transform:uppercase;padding:1px 6px;border-radius:4px;margin-left:8px}
   .pri.high{color:var(--lo);background:#fbeae5}.pri.medium{color:#b45309;background:#fdf3e8}.pri.low{color:var(--muted);background:#f1f1f2}
+  .src-spv{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:4px;color:var(--kpi);background:#eeecfd;margin-left:8px}
   .fgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:11px}
   .fgrid .k{display:block;font-size:9px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:1px}
+  .foot{padding-top:14px;font-size:10.5px;color:var(--muted)}
   </style></head><body><div class="wrap">
   <div class="head"><div><div class="eyebrow">KPI Scorecard \xB7 Result</div><h1>${esc(p.editor)}</h1>
   <div class="meta">${esc(p.level)} \xB7 ${esc(p.quarter)} \xB7 supervisor ${esc(p.supervisor)}</div></div>
-  <div class="official"><div class="lbl">Official KPI</div><div class="big">${p.official_kpi}</div></div></div>
-  <div class="section"><div class="stitle">Category breakdown</div>${catRows}</div>
+  <div class="official"><div class="lbl">Official KPI</div><div class="big">${f2(p.official_kpi)}</div>
+  <div class="sub">supervisor rating</div></div></div>
+  ${gapHtml}
+  <div class="section"><div class="stitle">Category breakdown</div>
+  <div class="scorekey"><span><i class="k-self"></i> Self — calibration only</span><span><i class="k-spv"></i> Supervisor — the KPI of record</span></div>
+  ${catRows}</div>
   <div class="section"><div class="stitle">Focus for next quarter</div>${focusRows}</div>
+  <div class="foot">Official record \xB7 supervisor rating is the KPI of record; self-assessment is calibration only. Case <b>${esc(p.id || "")}</b>.</div>
   </div></body></html>`;
 }
 __name(kpiResultCardHtml, "kpiResultCardHtml");
-function peerScorecardHtml(agg) {
-  const valRows = agg.values.map(
-    (v) => `<div class="val"><div class="vtop"><span class="vname">${esc(v.name)}</span>
-      <span class="vmean" style="color:${BAND_COLORS[band(v.mean)]}">${v.mean.toFixed(2)}</span></div></div>`
-  ).join("");
-  let trackHtml = "";
-  if (agg.track_reco) {
-    const t = agg.track_reco;
-    const tot = (t.mg || 0) + (t.ic || 0) + (t.unsure || 0);
-    trackHtml = `<div class="section"><div class="stitle">Track fit \xB7 peers' read</div>
-      <p style="font-size:12px">Management \u2192 Supervisor: <b>${t.mg || 0}</b> \xB7 IC \u2192 Principal: <b>${t.ic || 0}</b> \xB7 Too early: <b>${t.unsure || 0}</b> (of ${tot})</p></div>`;
+// Kept in step with peer_card.js (the browser copy used by peer_growth_view.html)
+// so this PDF and the live pooled view never show different-looking reports for
+// the same data -- see the note at the top of peer_card.js for the reasoning.
+var PEER_CLUSTERS = [
+  ["Underdog Mindset", ["Growth Potential", "Agility", "Continuous Improvement"]],
+  ["Selfless Collaboration", ["Teamwork", "Knowledge Sharing", "Conflict Resolution"]],
+  ["Clarity", ["Communication & Handoff", "Visibility", "Deep Dive"]],
+  ["Ownership", ["Accountability", "Reliability & Deadlines", "Fill-the-Gap Attitude", "Quality of Work"]],
+  ["True Leadership", ["Integrity", "Earn Trust"]]
+];
+var PEER_LVLNAME = { intern: "Intern", jr: "Junior", assoc: "Video Editor", ve: "Video Editor", senior: "Senior", supervisor: "Supervisor", principal: "Principal" };
+function peerMean(a) { return a.reduce((x, y) => x + y, 0) / a.length; }
+__name(peerMean, "peerMean");
+function peerDistBars(scores) {
+  const c = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  scores.forEach((s) => c[s]++);
+  const max = Math.max(c[1], c[2], c[3], c[4], c[5], 1);
+  let h = '<div class="dist">';
+  for (let i = 1; i <= 5; i++) {
+    const ht = c[i] ? Math.round(c[i] / max * 28) + 4 : 2;
+    h += `<div class="dc"><div class="b on${i}" style="height:${ht}px" title="${c[i]} rated ${i}"></div><div class="n">${i}</div></div>`;
   }
+  return h + "</div>";
+}
+__name(peerDistBars, "peerDistBars");
+function peerScorecardHtml(agg) {
+  const V = {};
+  (agg.values || []).forEach((v) => V[v.name] = v.scores || []);
+  const known = PEER_CLUSTERS.reduce((a, c) => a.concat(c[1]), []).filter((n) => V[n] && V[n].length);
+  const extras = (agg.values || []).map((v) => v.name).filter((n) => !PEER_CLUSTERS.some((c) => c[1].includes(n)));
+  const allVals = known.concat(extras);
+  const overall = allVals.length ? peerMean(allVals.map((v) => peerMean(V[v]))) : null;
+
+  let clhtml = "";
+  PEER_CLUSTERS.forEach(([cn, vals]) => {
+    const have = vals.filter((v) => V[v] && V[v].length);
+    if (!have.length) return;
+    const cm = peerMean(have.map((v) => peerMean(V[v])));
+    clhtml += `<div class="cl"><div class="cn">${esc(cn)}</div><div class="cm"><b class="cm-${band(cm)}">${f2(cm)}</b><span>cluster mean</span></div></div>`;
+  });
+
+  let vhtml = "";
+  PEER_CLUSTERS.forEach(([cn, vals]) => {
+    const have = vals.filter((v) => V[v] && V[v].length);
+    if (!have.length) return;
+    vhtml += `<div class="clushd">${esc(cn)}</div>`;
+    have.forEach((v) => {
+      const m = peerMean(V[v]);
+      vhtml += `<div class="val"><div class="vtop"><span class="vname">${esc(v)}</span><span class="vmean ${band(m)}">${f2(m)}</span></div>${peerDistBars(V[v])}</div>`;
+    });
+  });
+  if (extras.length) {
+    vhtml += `<div class="clushd">Other values</div>`;
+    extras.forEach((v) => {
+      const m = peerMean(V[v]);
+      vhtml += `<div class="val"><div class="vtop"><span class="vname">${esc(v)}</span><span class="vmean ${band(m)}">${f2(m)}</span></div>${peerDistBars(V[v])}</div>`;
+    });
+  }
+
+  let trackHtml = "";
+  if (agg.level === "senior" && agg.track_reco) {
+    const t = agg.track_reco, tot = (t.mg || 0) + (t.ic || 0) + (t.unsure || 0);
+    const row = (cls, lbl, c) => `<div class="tr"><span class="lbl ${cls}">${lbl}</span><div class="track-bar"><div class="track-fill ${cls}" style="width:${tot ? Math.round(c / tot * 100) : 0}%"></div></div><span class="cnt">${c}</span></div>`;
+    const lead = (t.mg || 0) >= (t.ic || 0) ? "Management \u2192 Supervisor" : "IC \u2192 Principal";
+    trackHtml = `<div class="section"><div class="stitle">Track fit \xB7 peers' read</div>
+      <div class="track"><div class="q">Which way is this senior growing?</div>
+      <div class="g">Aggregated peer recommendations. Developmental signal to inform the track decision \u2014 not a verdict.</div>
+      <div class="trbars">${row("mg", "Management \u2192 Supervisor", t.mg || 0)}${row("ic", "IC \u2192 Principal", t.ic || 0)}${row("un", "Too early to say", t.unsure || 0)}</div>
+      ${tot ? `<div class="lean">Peers lean <b>${esc(lead)}</b> (${Math.max(t.mg || 0, t.ic || 0)} of ${tot}).</div>` : ""}
+      </div></div>`;
+  }
+
+  const li = (x) => `<li>${esc(x)}</li>`;
+  const pooled = (agg.pooled_strengths && agg.pooled_strengths.length) || (agg.pooled_constructive && agg.pooled_constructive.length)
+    ? `<div class="section"><div class="stitle">Pooled feedback</div>
+      ${agg.pooled_strengths && agg.pooled_strengths.length ? `<div class="pooled"><div class="who">Strengths</div><ul>${agg.pooled_strengths.map(li).join("")}</ul></div>` : ""}
+      ${agg.pooled_constructive && agg.pooled_constructive.length ? `<div class="pooled"><div class="who">To grow</div><ul>${agg.pooled_constructive.map(li).join("")}</ul></div>` : ""}
+      </div>`
+    : "";
+
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  :root{--peer:#0d9488;--muted:#6b7280;--line:#e6e8eb;}
-  *{box-sizing:border-box}body{margin:0;background:#fff;color:#17191d;font-family:Inter,Arial,sans-serif;font-size:13px}
+  :root{--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;--kpi:#4f46e5;--peer:#0d9488;--peer-bg:#e9f6f4;--lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;}
+  *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font-family:Inter,Arial,sans-serif;font-size:13px;line-height:1.5}
   .wrap{max-width:720px;margin:0 auto;padding:20px}
-  .head{padding:0 0 16px;border-bottom:1px solid var(--line)}
+  .doc{border-top:3px solid var(--peer);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  .head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
   .eyebrow{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--peer)}
-  h1{font-size:20px;margin:6px 0 0}.meta{font-size:12px;color:var(--muted);margin-top:4px}
-  .anon{background:#e9f6f4;padding:10px 14px;font-size:11.5px;color:#0b6055;border-bottom:1px solid var(--line)}
-  .section{padding:16px 0;border-bottom:1px solid var(--line)}
+  h1{font-size:19px;font-weight:700;margin:5px 0 0}.meta{font-size:11.5px;color:var(--muted);margin-top:5px}.meta b{color:var(--ink)}
+  .overall{text-align:center;flex:0 0 auto}
+  .overall .medal{border-radius:12px;padding:10px 18px;min-width:104px;background:#fff;border:1.5px solid var(--line)}
+  .overall .medal.lo{border-color:#f0c2b5;background:#fdf3f0}.overall .medal.mid{border-color:#ecd7ac;background:#fbf4e7}.overall .medal.hi{border-color:#bde5d6;background:#eff9f4}
+  .overall .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .overall .big{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1;color:var(--ink)}
+  .overall .medal.lo .big{color:#c4381d}.overall .medal.mid .big{color:#b45309}.overall .medal.hi .big{color:#1c8a68}
+  .overall .sub{font-size:10px;color:var(--muted);margin-top:2px;font-weight:600}
+  .anon{background:var(--peer-bg);padding:10px 20px;font-size:11.5px;color:#0b6055;border-bottom:1px solid var(--line)}
+  .anon b{color:#083f38}
+  .section{padding:16px 20px;border-bottom:1px solid var(--line)}.section:last-child{border-bottom:none}
   .stitle{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
-  .val{padding:8px 0;border-bottom:1px solid #f1f2f4}.vtop{display:flex;justify-content:space-between}
-  .vname{font-weight:600;font-size:12.5px}.vmean{font-weight:800;font-size:14px}
-  </style></head><body><div class="wrap">
-  <div class="head"><div class="eyebrow">Peer Scorecard \xB7 developmental</div><h1>${esc(agg.ratee)}</h1>
-  <div class="meta">${esc(agg.level)} \xB7 ${esc(agg.cycle)} \xB7 ${agg.n} peer response${agg.n === 1 ? "" : "s"}</div></div>
-  <div class="anon">Pooled from ${agg.n} response${agg.n === 1 ? "" : "s"}. Developmental input, not a disciplinary record.</div>
-  <div class="section"><div class="stitle">By value</div>${valRows}</div>
+  .clusters{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .cl{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+  .cl .cn{font-size:11px;font-weight:650;color:var(--peer)}
+  .cl .cm{display:flex;align-items:baseline;gap:5px;margin-top:2px}
+  .cl .cm b{font-size:17px;font-weight:800}
+  .cl .cm span{font-size:10px;color:var(--muted)}
+  .cl .cm .cm-hi{color:var(--hi)}.cl .cm .cm-mid{color:var(--mid-ink)}.cl .cm .cm-lo{color:var(--lo)}.cl .cm .cm-na{color:var(--muted)}
+  .val{padding:9px 0;border-bottom:1px solid #f1f2f4}.val:last-child{border-bottom:none}
+  .vtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+  .vname{font-weight:600;font-size:12px}.vmean{font-weight:800;font-size:13px}
+  .vmean.lo{color:var(--lo)}.vmean.mid{color:var(--mid-ink)}.vmean.hi{color:var(--hi)}.vmean.na{color:var(--muted)}
+  .dist{display:flex;gap:3px;align-items:flex-end;height:30px}
+  .dc{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
+  .dc .b{width:100%;background:#eef0f2;border-radius:3px 3px 0 0;min-height:2px}
+  .dc .b.on1,.dc .b.on2{background:var(--lo)}.dc .b.on3{background:var(--mid)}.dc .b.on4,.dc .b.on5{background:var(--hi)}
+  .dc .n{font-size:8px;color:var(--muted)}
+  .clushd{grid-column:1/-1;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--peer);margin:12px 0 2px}
+  .clushd:first-child{margin-top:0}
+  .track{border:1px solid var(--line);border-radius:8px;padding:13px;background:#fafafb}
+  .track .q{font-size:12px;font-weight:600;margin-bottom:3px}
+  .track .g{font-size:11px;color:var(--muted);margin-bottom:10px}
+  .trbars{display:flex;flex-direction:column;gap:7px}
+  .tr{display:grid;grid-template-columns:150px 1fr 30px;gap:8px;align-items:center;font-size:11.5px}
+  .tr .lbl{font-weight:600}.tr .lbl.mg{color:var(--kpi)}.tr .lbl.ic{color:var(--peer)}.tr .lbl.un{color:var(--muted)}
+  .tr .track-bar{height:13px;background:#eef0f2;border-radius:4px;overflow:hidden}
+  .tr .track-fill{height:100%;border-radius:4px}
+  .tr .track-fill.mg{background:var(--kpi)}.tr .track-fill.ic{background:var(--peer)}.tr .track-fill.un{background:#c3c7cd}
+  .tr .cnt{text-align:right;font-weight:700}
+  .lean{margin-top:10px;font-size:11.5px;padding:8px 10px;border-radius:7px;background:var(--peer-bg);color:#0b6055}
+  .lean b{color:#083f38}
+  .pooled{border:1px solid var(--line);border-radius:8px;padding:11px 13px;margin-bottom:8px}
+  .pooled .who{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .pooled ul{margin:0;padding-left:15px}.pooled li{margin:3px 0;font-size:11.5px}
+  .foot{padding:12px 20px;font-size:10.5px;color:var(--muted);background:#fafafb}
+  </style></head><body><div class="wrap"><div class="doc">
+  <div class="head">
+  <div><div class="eyebrow">Peer Scorecard \xB7 developmental</div><h1>${esc(agg.ratee)}</h1>
+  <div class="meta"><b>${esc(PEER_LVLNAME[agg.level] || agg.level || "\u2014")}</b> \xB7 ${esc(agg.cycle)} \xB7 aggregated from <b>${agg.n}</b> peer response${agg.n === 1 ? "" : "s"}</div></div>
+  <div class="overall"><div class="medal ${band(overall)}"><div class="lbl">Overall</div><div class="big">${f2(overall)}</div><div class="sub">mean of ${allVals.length} values</div></div></div>
+  </div>
+  <div class="anon"><b>Pooled from every response this cycle.</b> Scores are averaged across all raters. Developmental input, not a disciplinary record.</div>
+  <div class="section"><div class="stitle">Cluster means</div><div class="clusters">${clhtml}</div></div>
+  <div class="section"><div class="stitle">By value \xB7 mean + how peers rated (1\u20135)</div>${vhtml}</div>
   ${trackHtml}
-  </div></body></html>`;
+  ${pooled}
+  <div class="foot">Peer Scorecard \xB7 pooled data \xB7 comments pooled when n&gt;1.</div>
+  </div></div></body></html>`;
 }
 __name(peerScorecardHtml, "peerScorecardHtml");
+// Resolves a personal token (the same one used for Peer Appraisal links) to the
+// roster identity that owns it. Used by the KPI form's ?e=<token> personal link
+// so an editor can only ever land on their own self-review, never anyone else's --
+// safe to expose without an admin key since it only echoes back identity that
+// matches a token the caller already possesses.
+async function handleWhoAmI(env, token) {
+  if (!token) return err("missing token");
+  const rows = await sbSelect(env, "roster", `?peer_token=eq.${encodeURIComponent(token)}&select=id,name,level`);
+  if (!rows.length) return json({ found: false });
+  return json({ found: true, id: rows[0].id, name: rows[0].name, level: rows[0].level });
+}
+__name(handleWhoAmI, "handleWhoAmI");
+// The rater's own assignment list for a cycle, so peer_appraisal.html can offer only
+// the peers they were actually asked to rate instead of the whole roster. Token-gated
+// like handleWhoAmI: it only echoes back assignments belonging to the token the caller
+// already holds, and never reveals anyone else's ratings or rater identities.
+async function handleMyPeerAssignments(env, token, cycle) {
+  if (!token) return err("missing token");
+  const raterRows = await sbSelect(env, "roster", `?peer_token=eq.${encodeURIComponent(token)}&select=id,name`);
+  if (!raterRows.length) return json({ found: false });
+  const rater = raterRows[0];
+  if (!cycle) return json({ found: true, rater: rater.name, assignments: [] });
+  const [assigned, done] = await Promise.all([
+    sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(cycle)}&rater_name=eq.${encodeURIComponent(rater.name)}&select=target_name`),
+    sbSelect(env, "peer_response", `?rater=eq.${encodeURIComponent(token)}&cycle=eq.${encodeURIComponent(cycle)}&select=detail`)
+  ]);
+  const doneSet = new Set(done.map((r) => r.detail && r.detail.target).filter(Boolean));
+  return json({
+    found: true,
+    rater: rater.name,
+    assignments: assigned.map((a) => ({ target: a.target_name, done: doneSet.has(a.target_name) }))
+  });
+}
+__name(handleMyPeerAssignments, "handleMyPeerAssignments");
 async function handleConfig(env) {
   const [roster, levels, kpi_rubric, peer_rubric, pip_rubric, lists] = await Promise.all([
     sbSelect(env, "roster", "?active=eq.true&select=id,name,level,track"),
@@ -20307,17 +20635,22 @@ async function pushToSheet(env, sheetName, row) {
 }
 __name(pushToSheet, "pushToSheet");
 // ============================================================
-// KPI — multi-stage case (editor locks self-scores, up to 3 supervisors,
-// finalize when editor + >=1 supervisor done). Mirrors the pip_case pattern.
+// KPI — two-stage case: editor locks self-scores, then the supervisor group
+// (all of them together, in one sitting) scores and files in a single step.
+// Mirrors the pip_case pattern.
 // ============================================================
-async function handleKpiNextId(env, quarter, editorSlugVal) {
-  if (!quarter || !editorSlugVal) return err("missing quarter/editor");
-  const prefix = `KPI-${quarter}-${editorSlugVal}-`;
+async function nextKpiId(env, quarter, editorName) {
+  const prefix = `KPI-${quarterToken(quarter)}-${nameToken(editorName)}-`;
   const rows = await sbSelect(env, "kpi_case", `?id=like.${encodeURIComponent(prefix + "*")}&select=id`);
   let max = 0;
   const re = new RegExp(`^${prefix}(\\d+)$`);
   for (const r of rows) { const m = r.id.match(re); if (m) max = Math.max(max, parseInt(m[1], 10)); }
-  return json({ id: `${prefix}${String(max + 1).padStart(2, "0")}` });
+  return `${prefix}${String(max + 1).padStart(2, "0")}`;
+}
+__name(nextKpiId, "nextKpiId");
+async function handleKpiNextId(env, quarter, editorName) {
+  if (!quarter || !editorName) return err("missing quarter/editor");
+  return json({ id: await nextKpiId(env, quarter, editorName) });
 }
 __name(handleKpiNextId, "handleKpiNextId");
 
@@ -20345,49 +20678,45 @@ __name(handleKpiOpen, "handleKpiOpen");
 // Editor stage: saves self-scores + notes and locks the editor's part.
 async function handleKpiEditor(env, body) {
   if (!body.id || !body.editor || !body.quarter) return err("missing id/editor/quarter");
-  const existing = await sbSelect(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}&select=editor_locked`);
+  const existing = await sbSelect(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}&select=editor_locked,reminder_task_id`);
   if (existing.length && existing[0].editor_locked) {
     return err("The editor's part is already locked for this review.", 409);
   }
   const slug = await editorSlug(env, body.editor);
+  // Defense in depth against the case-id-minting loophole: the client now resumes
+  // an existing open case instead of minting a new one, but that's a client-side
+  // choice -- without this, a direct API call (or a client bug) could still lock a
+  // fresh case id (…-02, …-03) for an editor+quarter that already has a locked or
+  // finalized case. One self-review per editor per quarter, enforced here too.
+  const key = slug || body.editor;
+  const siblings = await sbSelect(env, "kpi_case", `?editor_id=eq.${encodeURIComponent(key)}&quarter=eq.${encodeURIComponent(body.quarter)}&id=neq.${encodeURIComponent(body.id)}&select=id,editor_locked,finalized`);
+  const already = siblings.find((r) => r.editor_locked || r.finalized);
+  if (already) {
+    return err(`You've already submitted a self-review for ${body.quarter} (case ${already.id}). Only one submission per quarter is allowed.`, 409);
+  }
   await sbUpsert(env, "kpi_case", {
     id: body.id, editor_id: slug, editor_name: body.editor, level: body.level, quarter: body.quarter,
     editor_locked: true, editor_data: body.editor_data, self_overall: body.self_overall,
     config_version: body.config_version || null, updated_at: (/* @__PURE__ */ new Date()).toISOString()
   }, "id");
+  const reminderTaskId = existing.length && existing[0].reminder_task_id;
+  if (reminderTaskId) {
+    await clickupUpdateTask(env, reminderTaskId, { name: `KPI self-review \xB7 ${body.editor} \xB7 ${body.quarter} \xB7 Awaiting supervisor` });
+  }
   return json({ ok: true, id: body.id });
 }
 __name(handleKpiEditor, "handleKpiEditor");
 
-// Supervisor stage: appends one supervisor's scores (max 3, no duplicate names).
-async function handleKpiSupervisor(env, body) {
-  if (!body.id || !body.supervisor_name) return err("missing id/supervisor_name");
-  const rows = await sbSelect(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}&select=*`);
-  if (!rows.length) return err("KPI case not found.", 404);
-  const kpiCase = rows[0];
-  if (!kpiCase.editor_locked) return err("The editor hasn't submitted their part yet.", 409);
-  if (kpiCase.finalized) return err("This review is already finalized.", 409);
-  const sups = Array.isArray(kpiCase.supervisors) ? kpiCase.supervisors : [];
-  if (sups.find((s) => s.name === body.supervisor_name)) {
-    return err(`${body.supervisor_name} has already submitted for this review.`, 409);
-  }
-  if (sups.length >= 3) return err("This review already has 3 supervisor submissions (the maximum).", 409);
-  sups.push({ name: body.supervisor_name, data: body.supervisor_data, overall: body.supervisor_overall, submitted_at: (/* @__PURE__ */ new Date()).toISOString() });
-  await sbUpsert(env, "kpi_case", { id: body.id, supervisors: sups, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, "id");
-  return json({ ok: true, supervisor_count: sups.length });
-}
-__name(handleKpiSupervisor, "handleKpiSupervisor");
-
-// Finalize: allowed once editor + >=1 supervisor done. Averages supervisor
-// overalls into official_kpi, renders PDF, files into the editor's KPI list.
+// Finalize: one combined supervisor submission per case (the supervisors score
+// together in one sitting, not as separate averaged entries -- see CLAUDE.md).
+// Renders the PDF and files into the editor's KPI list in one shot.
 function kpiTaskMd(p) {
   const f2 = (v) => v == null ? "\u2014" : (+v).toFixed(2);
-  const sups = (p.supervisors || []).map((s) => `${s.name} ${f2(s.overall)}`).join(" \xb7 ") || "\u2014";
   const gap = (p.self_overall != null && p.official_kpi != null) ? (p.self_overall - p.official_kpi >= 0 ? "+" : "") + f2(p.self_overall - p.official_kpi) : "\u2014";
   const rows = (p.categories || []).map((c) => `| ${c.name} | ${f2(c.self)} | ${f2(c.spv)} |`).join("\n");
-  const focus = (p.focus || []).filter((f) => f && f.area).map((f) => `- **${f.area}** (${f.priority || "\u2014"})`).join("\n") || "\u2014";
+  const focus = (p.focus || []).filter((f) => f && f.area).map((f) => `- **${f.area}** (${f.priority || "\u2014"})${f.source === "supervisor" ? " \u2014 added by supervisor" : ""}`).join("\n") || "\u2014";
   return `**Official KPI ${f2(p.official_kpi)}** \xb7 self ${f2(p.self_overall)} \xb7 gap ${gap}
-Case \`${p.id || ""}\` \xb7 ${p.level || ""} \xb7 supervisors: ${sups}
+Case \`${p.id || ""}\` \xb7 ${p.level || ""}
 
 | Category | Self | Official |
 |---|---|---|
@@ -20405,28 +20734,52 @@ async function handleKpiFinalize(env, body) {
   if (!rows.length) return err("KPI case not found.", 404);
   const kpiCase = rows[0];
   if (!kpiCase.editor_locked) return err("Editor part not submitted yet.", 409);
-  const sups = Array.isArray(kpiCase.supervisors) ? kpiCase.supervisors : [];
-  if (sups.length < 1) return err("At least one supervisor must submit before filing.", 409);
   if (kpiCase.finalized) return err("This review is already filed.", 409);
+  if (body.official_kpi == null || isNaN(Number(body.official_kpi))) return err("Missing supervisor scores.", 400);
 
-  const supOveralls = sups.map((s) => Number(s.overall)).filter((n) => !isNaN(n));
-  const official = supOveralls.length ? +(supOveralls.reduce((a, b) => a + b, 0) / supOveralls.length).toFixed(2) : null;
-
+  const official = +Number(body.official_kpi).toFixed(2);
   const payload = { ...body, editor: kpiCase.editor_name, level: kpiCase.level, quarter: kpiCase.quarter,
-    official_kpi: official, self_overall: kpiCase.self_overall, editor_data: kpiCase.editor_data, supervisors: sups };
-  const pdf = await renderPdf(env, kpiResultCardHtml(payload));
-  const listId = await resolveEditorList(env, kpiCase.editor_id, kpiCase.editor_name, "kpi");
+    official_kpi: official, self_overall: kpiCase.self_overall, editor_data: kpiCase.editor_data, supervisor: "Supervisor" };
+  // renderPdf spins up a headless browser and dominates this request's latency;
+  // the list/assignee lookups are independent of it, so they run alongside it
+  // instead of queueing behind it. Failure behaviour is unchanged (any of the
+  // three throwing still fails the request before anything is written).
+  const [pdf, listId, assigneeId] = await Promise.all([
+    renderPdf(env, kpiResultCardHtml(payload)),
+    resolveEditorList(env, kpiCase.editor_id, kpiCase.editor_name, "kpi"),
+    clickupResolveUserId(env, kpiCase.editor_name)
+  ]);
   const qr = quarterRange(kpiCase.quarter);
-  const assigneeId = await clickupResolveUserId(env, kpiCase.editor_name);
-  const task = await clickupCreateTaskInList(env, listId, `KPI \xB7 ${kpiCase.editor_name} \xB7 ${kpiCase.quarter}`, {
-    assignees: assigneeId ? [assigneeId] : null,
-    markdown_description: kpiTaskMd(payload),
-    start_date: qr ? qr.start : null,
-    due_date: qr ? qr.end : null,
-    priority: bandPriority(official),
-    tags: ["kpi", qr ? qr.tag : null, bandTag(official)].filter(Boolean)
-  });
+  const finalName = `KPI \xB7 ${kpiCase.editor_name} \xB7 ${kpiCase.quarter} \xB7 Filed ✓`;
+  const finalMd = kpiTaskMd(payload);
+  // One task for the whole KPI cycle: reuse the self-review task created when the
+  // link was issued (already renamed once at lock) instead of spinning up a second
+  // "filed" task alongside it. Only falls back to creating a fresh task if this
+  // case was never linked to one -- e.g. a supervisor filed it without the editor
+  // ever going through the admin "Add task in ClickUp" flow.
+  let task;
+  if (kpiCase.reminder_task_id) {
+    const updated = await clickupUpdateTask(env, kpiCase.reminder_task_id, {
+      name: finalName, description: finalMd, markdown_description: finalMd,
+      priority: bandPriority(official), due_date: qr ? qr.end : null, start_date: qr ? qr.start : null
+    });
+    task = updated || { id: kpiCase.reminder_task_id };
+  } else {
+    task = await clickupCreateTaskInList(env, listId, finalName, {
+      assignees: assigneeId ? [assigneeId] : null,
+      markdown_description: finalMd,
+      start_date: qr ? qr.start : null,
+      due_date: qr ? qr.end : null,
+      priority: bandPriority(official),
+      tags: ["KPI", qr ? qr.tag : null].filter(Boolean)
+    });
+  }
   await clickupAttachPdf(env, task.id, `KPI_Result_${kpiCase.editor_name.replace(/\s+/g, "_")}_${kpiCase.quarter}.pdf`, pdf);
+  // Filed = no longer pending, so drop the To-do mirror added at link-task creation;
+  // the task lives on in the KPI list as the quarter's record. (No-op when the
+  // Tasks in Multiple Lists ClickApp is off or the mirror was never added.)
+  const todoListId = await resolveEditorList(env, kpiCase.editor_id, kpiCase.editor_name, "todo");
+  if (todoListId) await clickupRemoveTaskFromList(env, todoListId, task.id);
   for (const f of (payload.focus || [])) {
     if (!f || !f.area) continue;
     try {
@@ -20440,9 +20793,10 @@ async function handleKpiFinalize(env, body) {
     } catch (e) {}
   }
 
-  await sbUpsert(env, "kpi_case", { id: body.id, official_kpi: official, finalized: true, clickup_task_id: task.id, detail: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, "id");
+  // PATCH (not upsert): row already exists; a partial upsert trips the editor_name NOT NULL check.
+  await sbPatch(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}`, { official_kpi: official, finalized: true, clickup_task_id: task.id, reminder_task_id: task.id, detail: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
   await pushToSheet(env, "KPI", { values: [(/* @__PURE__ */ new Date()).toISOString(), kpiCase.editor_name, kpiCase.level, kpiCase.quarter, official, kpiCase.self_overall, task.id, JSON.stringify(payload)] });
-  return json({ ok: true, official_kpi: official, clickup_task_id: task.id, supervisor_count: sups.length });
+  return json({ ok: true, official_kpi: official, clickup_task_id: task.id });
 }
 __name(handleKpiFinalize, "handleKpiFinalize");
 function peerTaskMd(agg, overallMean, slug) {
@@ -20458,7 +20812,7 @@ function peerTaskMd(agg, overallMean, slug) {
 |---|---|
 ${rows}
 ${trk}
-_Anonymous pooled means \u2014 this task updates in place as raters submit; latest PDF attachment = current._
+_Anonymous pooled means \u2014 this summary updates in place as raters submit, so it is always current. PDFs are snapshots: one when the pool opens, one marked \`_final\` once every assigned rater is in._
 [Open live growth view](${PAGES_BASE}/peer_growth_view.html?target=${encodeURIComponent(slug || "")}&cycle=${encodeURIComponent(agg.cycle || "")})`;
 }
 __name(peerTaskMd, "peerTaskMd");
@@ -20473,6 +20827,21 @@ function peerAggValues(rows) {
   return { values, track_reco };
 }
 __name(peerAggValues, "peerAggValues");
+// Shared shape for both the live pooled view (handlePeerAggregate) and the PDF
+// attached to ClickUp at submission (handleSubmitPeer) -- built from the same
+// rows so the two can never carry different data for the same responses. Rows
+// must include ratings, track_reco, key_strength, constructive.
+function buildPeerAggReport(rows, ratee, level, cycle, n) {
+  const { values, track_reco } = peerAggValues(rows);
+  const texts = (k) => rows.map((r) => (r[k] || "").trim()).filter(Boolean).sort();
+  return {
+    ratee, level, cycle, n, values,
+    track_reco: level === "senior" ? track_reco : null,
+    pooled_strengths: texts("key_strength"),
+    pooled_constructive: texts("constructive")
+  };
+}
+__name(buildPeerAggReport, "buildPeerAggReport");
 // Live pooled aggregate for the growth view. Never returns rater identity;
 // per-value score arrays are sorted so rows can't be re-aligned across values.
 // Optional gate: if env.PEER_VIEW_KEY is set, ?key= must match.
@@ -20486,21 +20855,258 @@ async function handlePeerAggregate(env, targetSlug, cycle, key) {
     rows = await sbSelect(env, "peer_response", `?detail->>target=eq.${encodeURIComponent(person.name)}&cycle=eq.${encodeURIComponent(cycle)}&select=ratings,track_reco,key_strength,constructive`);
   }
   const n = rows.length;
-  if (!n) return json({ found: false, n: 0 });
-  const { values, track_reco } = peerAggValues(rows);
-  const texts = (k) => rows.map((r) => (r[k] || "").trim()).filter(Boolean).sort();
-  return json({
-    found: true, n,
-    ratee: person ? person.name : targetSlug,
-    level: person ? person.level : null,
-    cycle,
-    values,
-    track_reco: person && person.level === "senior" ? track_reco : null,
-    pooled_strengths: texts("key_strength"),
-    pooled_constructive: texts("constructive")
-  });
+  // Confidentiality floor: never reveal a pooled report until MIN_N raters have submitted,
+  // so no single rater's scores can be read off. `held` distinguishes "1 so far" from "none".
+  if (n < MIN_N) return json({ found: false, n, held: n > 0, min_n: MIN_N });
+  return json({ found: true, ...buildPeerAggReport(rows, person ? person.name : targetSlug, person ? person.level : null, cycle, n) });
 }
 __name(handlePeerAggregate, "handlePeerAggregate");
+// ===== Peer assignment portal (supervisor picks rater -> target per cycle, tracks
+// submission status, surfaces each rater's reusable link). Admin-gated by PEER_ADMIN_KEY,
+// same ?key= convention as PEER_VIEW_KEY. Does not touch the peer_appraisal.html scoring
+// flow at all -- it only reads/writes the peer_assignment table and roster.peer_token. =====
+function checkAdminKey(env, key) {
+  return !!env.PEER_ADMIN_KEY && key === env.PEER_ADMIN_KEY;
+}
+__name(checkAdminKey, "checkAdminKey");
+function genToken() {
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+}
+__name(genToken, "genToken");
+async function ensureRaterLink(env, roster, name) {
+  const person = roster.find((r) => r.name === name);
+  if (!person) return null;
+  let token = person.peer_token;
+  if (!token) {
+    token = genToken();
+    await sbPatch(env, "roster", `?id=eq.${encodeURIComponent(person.id)}`, { peer_token: token });
+    person.peer_token = token;
+  }
+  return { name: person.name, token, link: `${PAGES_BASE}/peer_appraisal.html?t=${token}` };
+}
+__name(ensureRaterLink, "ensureRaterLink");
+async function handleRaterLink(env, editorName, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  if (!editorName) return err("missing editor");
+  const roster = await sbSelect(env, "roster", `?select=id,name,peer_token`);
+  const link = await ensureRaterLink(env, roster, editorName);
+  if (!link) return err("Editor not found in roster.", 404);
+  return json(link);
+}
+__name(handleRaterLink, "handleRaterLink");
+// Bulk: every active person's personal token, with both the KPI and Peer links
+// derived from it. Lets the admin page list everyone at once instead of one call
+// per person. Generates a token for anyone who doesn't have one yet.
+async function handleAllRaterLinks(env, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  const roster = await sbSelect(env, "roster", `?active=eq.true&select=id,name,peer_token&order=name.asc`);
+  const people = [];
+  for (const p of roster) {
+    let token = p.peer_token;
+    if (!token) {
+      token = genToken();
+      await sbPatch(env, "roster", `?id=eq.${encodeURIComponent(p.id)}`, { peer_token: token });
+    }
+    people.push({
+      id: p.id, name: p.name, token,
+      kpi_link: `${PAGES_BASE}/kpi_scorecard.html?e=${token}`,
+      peer_link: `${PAGES_BASE}/peer_appraisal.html?t=${token}`
+    });
+  }
+  return json({ people });
+}
+__name(handleAllRaterLinks, "handleAllRaterLinks");
+// Creates a real ClickUp task carrying an editor's personal KPI link, assigned to
+// them -- so the link is only ever discovered by clicking through from ClickUp,
+// never pasted/forwarded by hand. Also plants a placeholder kpi_case row so that
+// when the editor actually locks their self-review, the task can be renamed to
+// show it's now awaiting the supervisor (see handleKpiEditor/handleKpiFinalize).
+async function handleCreateKpiLinkTask(env, body) {
+  if (!checkAdminKey(env, body.key)) return err("Unauthorized", 401);
+  if (!body.editor_name || !body.quarter) return err("missing editor_name/quarter");
+  const roster = await sbSelect(env, "roster", `?select=id,name,level,peer_token`);
+  const person = roster.find((r) => r.name === body.editor_name);
+  if (!person) return err("Editor not found in roster.", 404);
+  // Idempotency guard: one KPI cycle per editor per quarter. If an open case with a
+  // task already exists, return it instead of minting a second id + second ClickUp
+  // task. Closes the double-click / re-click gap server-side (the client already
+  // disables the button, but the API is the real contract) -- previously this could
+  // spawn an orphaned KPI-...-02 alongside the live case.
+  const existingCases = await sbSelect(env, "kpi_case", `?editor_id=eq.${encodeURIComponent(person.id)}&quarter=eq.${encodeURIComponent(body.quarter)}&select=id,finalized,reminder_task_id`);
+  const openWithTask = existingCases.find((c) => !c.finalized && c.reminder_task_id);
+  if (openWithTask) {
+    return json({ ok: true, task_id: openWithTask.reminder_task_id, case_id: openWithTask.id, reused: true });
+  }
+  const link = await ensureRaterLink(env, roster, body.editor_name);
+  const kpiLink = link.link.replace("peer_appraisal.html?t=", "kpi_scorecard.html?e=");
+  const listId = await resolveEditorList(env, person.id, person.name, "kpi");
+  const assigneeId = await clickupResolveUserId(env, person.name);
+  const qr = quarterRange(body.quarter);
+  const task = await clickupCreateTaskInList(env, listId, `KPI self-review \xB7 ${person.name} \xB7 ${body.quarter}`, {
+    assignees: assigneeId ? [assigneeId] : null,
+    tags: ["KPI", qr ? qr.tag : null].filter(Boolean),
+    markdown_description: `Fill in your KPI self-review for **${body.quarter}**: ${kpiLink}\n\nThis is your personal link — it only ever opens your own review, never anyone else's.`
+  });
+  // The KPI task's home is the KPI list (it's the same task that later becomes the
+  // filed record -- one task per quarter). While it's still pending, mirror it into
+  // the person's To-do list so everything they owe lives in one view; the mirror is
+  // removed at filing (handleKpiFinalize). No-ops if the workspace doesn't have the
+  // Tasks in Multiple Lists ClickApp enabled.
+  const todoListId = await resolveEditorList(env, person.id, person.name, "todo");
+  if (todoListId && todoListId !== listId) await clickupAddTaskToList(env, todoListId, task.id);
+  // Insert (not upsert) with re-mint-on-conflict so a concurrent create can't merge
+  // onto our row; the id is minted inside the retry. The task name has no id in it,
+  // so associating it with whichever id wins is safe.
+  const { id: caseId } = await sbInsertMinted(env, "kpi_case",
+    () => nextKpiId(env, body.quarter, body.editor_name),
+    (id) => ({ id, editor_id: person.id, editor_name: person.name, level: person.level, quarter: body.quarter,
+      editor_locked: false, finalized: false, reminder_task_id: task.id, updated_at: (/* @__PURE__ */ new Date()).toISOString() })
+  );
+  return json({ ok: true, task_id: task.id, case_id: caseId });
+}
+__name(handleCreateKpiLinkTask, "handleCreateKpiLinkTask");
+// Same idea for Peer Appraisal, but scoped per rater per cycle (one link covers
+// everyone they're assigned to rate that cycle, not one link per pairing).
+async function handleCreatePeerLinkTask(env, body) {
+  if (!checkAdminKey(env, body.key)) return err("Unauthorized", 401);
+  if (!body.rater_name || !body.cycle) return err("missing rater_name/cycle");
+  const roster = await sbSelect(env, "roster", `?select=id,name,peer_token`);
+  const rater = roster.find((r) => r.name === body.rater_name);
+  if (!rater) return err("Rater not found in roster.", 404);
+  const link = await ensureRaterLink(env, roster, body.rater_name);
+  const assignments = await sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(body.cycle)}&rater_name=eq.${encodeURIComponent(body.rater_name)}&select=target_name`);
+  const targets = assignments.map((a) => a.target_name);
+  // The rater's *prompt* goes in their To-do list; their Peer list is reserved for
+  // scorecards ABOUT them, so prompts and results never mix in one view.
+  const listId = await resolveEditorList(env, rater.id, rater.name, "todo") || await resolveEditorList(env, rater.id, rater.name, "peer");
+  const assigneeId = await clickupResolveUserId(env, rater.name);
+  const qr = quarterRange(body.cycle);
+  const targetList = targets.length ? targets.map((t) => `- ${t}`).join("\n") : "_No assignments yet for this cycle — add them in the assignments tracker first._";
+  const task = await clickupCreateTaskInList(env, listId, `Peer Appraisal \xB7 ${rater.name} \xB7 ${body.cycle}`, {
+    assignees: assigneeId ? [assigneeId] : null,
+    tags: ["Peer Appraisal", qr ? qr.tag : null].filter(Boolean),
+    markdown_description: `Rate your assigned peers for **${body.cycle}** using your personal link: ${link.link}\n\n**Assigned to rate:**\n${targetList}`
+  });
+  await sbUpsert(env, "peer_reminder", { cycle: body.cycle, rater_name: body.rater_name, task_id: task.id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, "cycle,rater_name");
+  return json({ ok: true, task_id: task.id });
+}
+__name(handleCreatePeerLinkTask, "handleCreatePeerLinkTask");
+// Reserves a case id only -- no ClickUp task yet. PIP has no equivalent to the
+// KPI/Peer personal link (there's no "affected editor's own link" for a PIP);
+// the supervisor who creates the case is the one who fills it in directly from
+// this admin panel. handlePipUpdate creates the real ClickUp task itself, on the
+// first save that actually has content -- so nothing shows up in ClickUp for a
+// PIP that was reserved but never actually started.
+async function handleCreatePipLinkTask(env, body) {
+  if (!checkAdminKey(env, body.key)) return err("Unauthorized", 401);
+  if (!body.editor_name) return err("missing editor_name");
+  const roster = await sbSelect(env, "roster", `?select=id,name,level`);
+  const person = roster.find((r) => r.name === body.editor_name);
+  if (!person) return err("Editor not found in roster.", 404);
+  const now = /* @__PURE__ */ new Date();
+  const quarter = `Q${Math.floor(now.getUTCMonth() / 3) + 1} ${now.getUTCFullYear()}`;
+  // Insert with re-mint-on-conflict (see sbInsertMinted) so two supervisors
+  // reserving a case at once get distinct ids instead of silently merging. Unlike
+  // KPI there's no per-quarter dedup -- an editor can legitimately have >1 PIP.
+  const { id: pipId } = await sbInsertMinted(env, "pip_case",
+    () => nextPipId(env, quarter, body.editor_name),
+    (id) => ({ id, editor_id: person.id, level: person.level,
+      detail: { pip_id: id, editor: person.name, level: person.level },
+      updated_at: (/* @__PURE__ */ new Date()).toISOString() })
+  );
+  const link = `${PAGES_BASE}/pip.html?pip=${encodeURIComponent(pipId)}`;
+  return json({ ok: true, case_id: pipId, link });
+}
+__name(handleCreatePipLinkTask, "handleCreatePipLinkTask");
+async function handleListAssignments(env, cycle, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  if (!cycle) return err("missing cycle");
+  // One round trip for the whole cycle's responses instead of one query per
+  // assignment row (the old shape was an N+1 that made this page's load time
+  // grow linearly with assignment count -- ~30 sequential selects for a full
+  // team cycle). Completion is then a Set lookup keyed on rater-token + target.
+  const [assignments, roster, reminders, responses] = await Promise.all([
+    sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(cycle)}&order=created_at.asc&select=*`),
+    sbSelect(env, "roster", `?select=id,name,peer_token`),
+    sbSelect(env, "peer_reminder", `?cycle=eq.${encodeURIComponent(cycle)}&select=rater_name,task_id`),
+    sbSelect(env, "peer_response", `?cycle=eq.${encodeURIComponent(cycle)}&select=rater,target:detail->>target`)
+  ]);
+  const taskedRaters = new Set(reminders.filter((r) => r.task_id).map((r) => r.rater_name));
+  const doneKeys = new Set(responses.map((r) => `${r.rater} ${r.target}`));
+  const out = [];
+  for (const a of assignments) {
+    // ensureRaterLink only touches the network when someone is missing a token
+    // (one-time backfill); otherwise it's a pure in-memory lookup on `roster`.
+    const link = await ensureRaterLink(env, roster, a.rater_name);
+    const completed = link ? doneKeys.has(`${link.token} ${a.target_name}`) : false;
+    out.push({ id: a.id, cycle: a.cycle, rater_name: a.rater_name, target_name: a.target_name, completed, rater_link: link ? link.link : null, has_task: taskedRaters.has(a.rater_name) });
+  }
+  return json({ assignments: out });
+}
+__name(handleListAssignments, "handleListAssignments");
+async function handleCreateAssignment(env, body) {
+  if (!checkAdminKey(env, body.key)) return err("Unauthorized", 401);
+  if (!body.cycle || !body.rater_name || !body.target_name) return err("missing cycle/rater_name/target_name");
+  if (body.rater_name === body.target_name) return err("A person can't rate themselves.", 400);
+  try {
+    const row = await sbInsert(env, "peer_assignment", {
+      cycle: body.cycle, rater_name: body.rater_name, rater_id: body.rater_id || null,
+      target_name: body.target_name, target_id: body.target_id || null
+    });
+    return json({ ok: true, id: row[0] && row[0].id });
+  } catch (e) {
+    if (String(e.message).includes("23505")) return err(`${body.rater_name} is already assigned to rate ${body.target_name} in ${body.cycle}.`, 409);
+    throw e;
+  }
+}
+__name(handleCreateAssignment, "handleCreateAssignment");
+async function handleDeleteAssignment(env, id, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  await sbDelete(env, "peer_assignment", `?id=eq.${encodeURIComponent(id)}`);
+  return json({ ok: true });
+}
+__name(handleDeleteAssignment, "handleDeleteAssignment");
+// ===== Read-only trackers for the links_admin.html portal. Unlike peer_assignment
+// (a manual planning table), these mirror the real kpi_case/pip_case rows directly --
+// there is nothing to "add", they just reflect whatever the live forms have saved. =====
+async function handleKpiCases(env, cycle, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  if (!cycle) return err("missing cycle");
+  const rows = await sbSelect(env, "kpi_case", `?quarter=eq.${encodeURIComponent(cycle)}&select=id,editor_name,level,editor_locked,finalized,official_kpi,reminder_task_id&order=editor_name.asc`);
+  return json({ cases: rows });
+}
+__name(handleKpiCases, "handleKpiCases");
+// Removes a case from our tracker only -- deliberately does not touch the ClickUp
+// task, since deleting a third-party record as a side effect of a "remove test
+// row" click would be a surprising, hard-to-reverse action to take unasked.
+async function handleDeleteKpiCase(env, id, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  if (!id) return err("missing id");
+  await sbDelete(env, "kpi_case", `?id=eq.${encodeURIComponent(id)}`);
+  return json({ ok: true });
+}
+__name(handleDeleteKpiCase, "handleDeleteKpiCase");
+// Same policy as handleDeleteKpiCase: removes the row from our tracker only and
+// never touches the ClickUp task -- deleting third-party records as a side effect
+// of a "remove wrong input" click is not a decision this button should make.
+async function handleDeletePipCase(env, id, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  if (!id) return err("missing id");
+  await sbDelete(env, "pip_case", `?id=eq.${encodeURIComponent(id)}`);
+  return json({ ok: true });
+}
+__name(handleDeletePipCase, "handleDeletePipCase");
+async function handlePipCases(env, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  const rows = await sbSelect(env, "pip_case", `?select=id,editor_id,level,severity,duration_d,start_date,review_date,result,verdict,detail,updated_at&order=updated_at.desc`);
+  const out = rows.map((r) => ({
+    id: r.id, editor: (r.detail && r.detail.editor) || r.editor_id, level: r.level,
+    severity: r.severity, start_date: r.start_date, review_date: r.review_date,
+    result: r.result, verdict: r.verdict, filed: !!(r.detail && r.detail._filed)
+  }));
+  return json({ cases: out });
+}
+__name(handlePipCases, "handlePipCases");
 async function handleSubmitPeer(env, body) {
   if (!body.target || !body.cycle || !body.ratings) return err("missing target/cycle/ratings");
   if (!body._token) return err("Missing rater link \u2014 open this form using your personal peer-appraisal link.", 400);
@@ -20527,6 +21133,22 @@ async function handleSubmitPeer(env, body) {
     detail: body,
     config_version: body.config_version || null
   });
+  // Update this rater's personal reminder task (created once per rater per cycle
+  // from links_admin.html, not per assignment) to reflect submission progress.
+  try {
+    const reminderRows = await sbSelect(env, "peer_reminder", `?cycle=eq.${encodeURIComponent(body.cycle)}&rater_name=eq.${encodeURIComponent(raterRows[0].name)}&select=task_id`);
+    if (reminderRows.length && reminderRows[0].task_id) {
+      const assignedRows = await sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(body.cycle)}&rater_name=eq.${encodeURIComponent(raterRows[0].name)}&select=target_name`);
+      const doneRows = await sbSelect(env, "peer_response", `?rater=eq.${encodeURIComponent(body._token)}&cycle=eq.${encodeURIComponent(body.cycle)}&select=detail`);
+      const doneTargets = new Set(doneRows.map((r) => r.detail && r.detail.target).filter(Boolean));
+      const total = assignedRows.length;
+      const done = assignedRows.filter((a) => doneTargets.has(a.target_name)).length;
+      const allDone = total > 0 && done >= total;
+      await clickupUpdateTask(env, reminderRows[0].task_id, {
+        name: `Peer Appraisal \xB7 ${raterRows[0].name} \xB7 ${body.cycle} \xB7 ${allDone ? "All done ✓" : `${done} of ${total} done`}`
+      });
+    }
+  } catch (e) {}
   const PEER_VALUE_ORDER = ["Growth Potential", "Agility", "Continuous Improvement", "Teamwork", "Knowledge Sharing", "Conflict Resolution", "Communication & Handoff", "Visibility", "Deep Dive", "Accountability", "Reliability & Deadlines", "Fill-the-Gap Attitude", "Quality of Work", "Integrity", "Earn Trust"];
   await pushToSheet(env, "Peer", { values: [
     (/* @__PURE__ */ new Date()).toISOString(), body._token, body.target, body.target_level, body.cycle,
@@ -20536,17 +21158,16 @@ async function handleSubmitPeer(env, body) {
   const rows = await sbSelect(
     env,
     "peer_response",
-    `?detail->>target=eq.${encodeURIComponent(body.target)}&cycle=eq.${encodeURIComponent(body.cycle)}&select=ratings,track_reco`
+    `?detail->>target=eq.${encodeURIComponent(body.target)}&cycle=eq.${encodeURIComponent(body.cycle)}&select=ratings,track_reco,key_strength,constructive`
   );
   const n = rows.length;
   if (n < MIN_N) return json({ ok: true, aggregated: false, n });
-  const { values, track_reco } = peerAggValues(rows);
-  const agg = { ratee: body.target, level: body.target_level, cycle: body.cycle, n, values, track_reco: body.target_level === "senior" ? track_reco : null };
-  const pdf = await renderPdf(env, peerScorecardHtml(agg));
-  const overallMean = values.length ? +(values.reduce((a, b) => a + b.mean, 0) / values.length).toFixed(2) : null;
+  const agg = buildPeerAggReport(rows, body.target, body.target_level, body.cycle, n);
+  const overallMean = agg.values.length ? +(agg.values.reduce((a, b) => a + b.mean, 0) / agg.values.length).toFixed(2) : null;
   const peerList = await resolveEditorList(env, targetSlug, body.target, "peer");
   const qr = quarterRange(body.cycle);
   const peerAssignee = await clickupResolveUserId(env, body.target);
+  const isFirstScorecard = !peerTaskId;
   if (!peerTaskId) {
     const task = await clickupCreateTaskInList(env, peerList, `Peer Scorecard \xB7 ${body.target} \xB7 ${body.cycle}`, {
       assignees: peerAssignee ? [peerAssignee] : null,
@@ -20554,7 +21175,7 @@ async function handleSubmitPeer(env, body) {
       start_date: qr ? qr.start : null,
       due_date: qr ? qr.end : null,
       priority: bandPriority(overallMean),
-      tags: ["peer", qr ? qr.tag : null, bandTag(overallMean)].filter(Boolean)
+      tags: ["Peer Appraisal", qr ? qr.tag : null].filter(Boolean)
     });
     peerTaskId = task.id;
     try {
@@ -20565,15 +21186,40 @@ async function handleSubmitPeer(env, body) {
   } else {
     await clickupUpdateTask(env, peerTaskId, { markdown_description: peerTaskMd(agg, overallMean, targetSlug), priority: bandPriority(overallMean) });
   }
-  await clickupAttachPdf(env, peerTaskId, `Peer_Scorecard_${body.target.replace(/\s+/g, "_")}_${body.cycle}.pdf`, pdf);
+  // ClickUp's API can't replace or delete an attachment -- every clickupAttachPdf call
+  // adds another file alongside the old ones. Attaching on every submission past MIN_N
+  // piled up a duplicate scorecard per rater. So attach only where the snapshot actually
+  // changes meaning: the first time the pool clears MIN_N, and again once every assigned
+  // rater is in (the complete picture). Intermediate submissions only refresh the task
+  // body -- which peerTaskMd already renders from the live pool -- and leave a note.
+  // Guarded by a flag rather than the rater count alone: nothing stops an unassigned
+  // rater from submitting, so `n >= assigned.length` can stay true for several more
+  // submissions and would re-attach every time. The flag makes the final PDF fire once.
+  let allRatersIn = false;
+  try {
+    const assigned = await sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(body.cycle)}&target_name=eq.${encodeURIComponent(body.target)}&select=rater_name`);
+    allRatersIn = assigned.length > 0 && n >= assigned.length;
+  } catch (e) {}
+  const finalAlreadyFiled = priorRows.some((r) => r.detail && r.detail._final_pdf);
+  const attachFinal = allRatersIn && !finalAlreadyFiled;
+  if (isFirstScorecard || attachFinal) {
+    const pdf = await renderPdf(env, peerScorecardHtml(agg));
+    await clickupAttachPdf(env, peerTaskId, `Peer_Scorecard_${body.target.replace(/\s+/g, "_")}_${body.cycle}${attachFinal ? "_final" : ""}.pdf`, pdf);
+    if (attachFinal) {
+      try {
+        await sbPatch(env, "peer_response",
+          `?rater=eq.${encodeURIComponent(body._token)}&cycle=eq.${encodeURIComponent(body.cycle)}&detail->>target=eq.${encodeURIComponent(body.target)}`,
+          { detail: { ...body, _clickup_task_id: peerTaskId, _final_pdf: true } });
+      } catch (e) {}
+    }
+  } else {
+    await clickupComment(env, peerTaskId, `Now pooled from ${n} raters — the task summary above is current. A final PDF is attached once every assigned rater has submitted.`);
+  }
   return json({ ok: true, aggregated: true, n, clickup_task_id: peerTaskId });
 }
 __name(handleSubmitPeer, "handleSubmitPeer");
-async function handlePipNextId(env, quarter, editorName) {
-  if (!quarter) return err("missing quarter");
-  if (!editorName) return err("missing editor");
-  const slug = await editorSlug(env, editorName) || String(editorName).toLowerCase().replace(/\s+/g, "").replace(/[^a-z0-9]/g, "");
-  const prefix = `PIP-${quarter}-${slug}-`;
+async function nextPipId(env, quarter, editorName) {
+  const prefix = `PIP-${quarterToken(quarter)}-${nameToken(editorName)}-`;
   const rows = await sbSelect(env, "pip_case", `?id=like.${encodeURIComponent(prefix + "*")}&select=id`);
   let max = 0;
   const re = new RegExp(`^${prefix}(\\d+)$`);
@@ -20581,8 +21227,13 @@ async function handlePipNextId(env, quarter, editorName) {
     const m = r.id.match(re);
     if (m) max = Math.max(max, parseInt(m[1], 10));
   }
-  const next = String(max + 1).padStart(2, "0");
-  return json({ id: `${prefix}${next}` });
+  return `${prefix}${String(max + 1).padStart(2, "0")}`;
+}
+__name(nextPipId, "nextPipId");
+async function handlePipNextId(env, quarter, editorName) {
+  if (!quarter) return err("missing quarter");
+  if (!editorName) return err("missing editor");
+  return json({ id: await nextPipId(env, quarter, editorName) });
 }
 async function handlePipGet(env, pipId) {
   const rows = await sbSelect(env, "pip_case", `?id=eq.${encodeURIComponent(pipId)}&select=*`);
@@ -20604,52 +21255,80 @@ async function handlePipOpen(env, editorName) {
 __name(handlePipOpen, "handlePipOpen");
 async function handlePipUpdate(env, pipId, body) {
   const existing = await sbSelect(env, "pip_case", `?id=eq.${encodeURIComponent(pipId)}&select=detail`);
-  let taskId = existing.length && existing[0].detail ? existing[0].detail._clickup_task_id : null;
+  const priorDetail = existing.length ? existing[0].detail : null;
+  let taskId = priorDetail ? priorDetail._clickup_task_id : null;
 
   const pdf = await renderPdf(env, pipReportHtml(body));
   const pipSlug = await editorSlug(env, body.editor);
+  const pipList = await resolveEditorList(env, pipSlug, body.editor, "pip");
+  const pipAssignee = await clickupResolveUserId(env, body.editor);
 
   if (!taskId) {
-    // First save — create the task in this editor's PIP list with the full report.
-    const pipList = await resolveEditorList(env, pipSlug, body.editor, "pip");
+    // First save -- create the task in this editor's PIP list with the full report.
     const pq = quarterRange(quarterFromPipId(pipId));
     const sevPrio = { 90: 1, 60: 2, 30: 3 }[+body.duration_d] || 2;
-    const pipAssignee = await clickupResolveUserId(env, body.editor);
-    const task = await clickupCreateTaskInList(env, pipList, `PIP \xB7 ${body.editor} \xB7 ${pipId}`, {
+    const task = await clickupCreateTaskInList(env, pipList, `PIP · ${body.editor} · ${pipId}`, {
       assignees: pipAssignee ? [pipAssignee] : null,
       start_date: body.start_date ? Date.parse(body.start_date) : null,
       due_date: body.review_date ? Date.parse(body.review_date) : null,
       priority: sevPrio,
-      tags: ["pip", pq ? pq.tag : null].filter(Boolean),
-      markdown_description: `**PIP ${pipId}** \xb7 ${body.editor} \xb7 ${body.severity || "\u2014"} (${body.duration_d || "?"}d)
-Managers: ${(body.managers || []).join(", ") || "\u2014"}
-Start ${body.start_date || "\u2014"} \xb7 Final review ${body.review_date || "\u2014"}
+      tags: ["PIP", pq ? pq.tag : null].filter(Boolean),
+      markdown_description: `**PIP ${pipId}** · ${body.editor} · ${body.severity || "—"} (${body.duration_d || "?"}d)
+Managers: ${(body.managers || []).join(", ") || "—"}
+Start ${body.start_date || "—"} · Final review ${body.review_date || "—"}
 
 Support actions are subtasks with their own due dates. Latest PDF attachment = current report. Live case: form URL + \`?pip=${pipId}\``
     });
     taskId = task.id;
     await clickupComment(env, taskId, `PIP opened for ${body.editor}. Live case: this form's URL + ?pip=${pipId}`);
-    for (const a of (body.actions || [])) {
-      if (!a || !(a.editor || a.company)) continue;
-      try {
-        await clickupCreateTaskInList(env, pipList, `Action \xB7 ${String(a.editor || a.company).slice(0, 100)}`, {
-          parent: taskId,
-          assignees: pipAssignee ? [pipAssignee] : null,
-          priority: 3,
-          due_date: a.by ? Date.parse(a.by) : null,
-          markdown_description: [a.editor ? `**Editor does** ${a.editor}` : null, a.company ? `**Company does** ${a.company}` : null].filter(Boolean).join("\n\n")
-        });
-      } catch (e) {}
-    }
   }
-  // Attach a fresh PDF every save (ClickUp keeps versions; latest is newest attachment).
-  await clickupAttachPdf(env, taskId, `PIP_${pipId}.pdf`, pdf);
+  // Sync action rows -> subtasks on EVERY save, not just the first. Matched by
+  // index against last save's subtask ids (priorDetail._action_subtask_ids) --
+  // existing rows get their due date/description updated in place, new rows
+  // get a new subtask created. (No reorder-safe row key exists, so reordering
+  // existing rows would misattribute updates; adding new rows at the end --
+  // the only way the current UI adds them -- is safe.)
+  const priorSubtaskIds = (priorDetail && priorDetail._action_subtask_ids) || [];
+  const filledActions = (body.actions || []).filter((a) => a && (a.editor || a.company));
+  // Each row's create/update is independent, so they run concurrently instead of
+  // queueing one ClickUp round trip per action row. Promise.all preserves input
+  // order, which is what keeps the index-matched _action_subtask_ids mapping
+  // (see comment above) exactly as the sequential loop produced it.
+  const actionSubtaskIds = await Promise.all(filledActions.map(async (a, i) => {
+    const name = `Action · ${String(a.editor || a.company).slice(0, 100)}`;
+    const due_date = a.by ? Date.parse(a.by) : null;
+    const markdown_description = [a.editor ? `**Editor does** ${a.editor}` : null, a.company ? `**Company does** ${a.company}` : null].filter(Boolean).join("\n\n");
+    if (priorSubtaskIds[i]) {
+      await clickupUpdateTask(env, priorSubtaskIds[i], { name, due_date, description: markdown_description });
+      return priorSubtaskIds[i];
+    }
+    try {
+      const sub = await clickupCreateTaskInList(env, pipList, name, {
+        parent: taskId, assignees: pipAssignee ? [pipAssignee] : null, priority: 3, due_date, markdown_description
+      });
+      return sub.id;
+    } catch (e) { return null; }
+  }));
+  // ClickUp's public API has no way to delete or replace an existing attachment --
+  // every call to clickupAttachPdf adds a brand-new file alongside whatever's already
+  // there. Re-attaching on every intermediate save piles up duplicate PDFs on the task.
+  // So: attach a PDF only at the two points a viewer actually needs a fresh snapshot --
+  // first creation, and final filing -- and just leave a comment in between.
+  // A pre-created placeholder (from links_admin.html, _pre_created:true) has a
+  // task id but no real content yet -- the first save with actual form data still
+  // counts as "first" so it gets a real PDF snapshot instead of just a comment.
+  const isFirstSave = !existing.length || !(existing[0].detail && existing[0].detail._clickup_task_id) || existing[0].detail._pre_created === true;
+  if (isFirstSave || body._finalize) {
+    await clickupAttachPdf(env, taskId, `PIP_${pipId}.pdf`, pdf);
+  } else {
+    await clickupComment(env, taskId, `Progress saved. Live case: this form's URL + \`?pip=${pipId}\` (the attached PDF above is from the last checkpoint or filing, not this save).`);
+  }
   if (body._finalize && (body.verdict === "PASS" || body.verdict && body.verdict.startsWith("NOT MET"))) {
     await clickupComment(env, taskId, `Verdict FILED: ${body.verdict}. This PIP is now closed.`);
     await clickupUpdateTask(env, taskId, { priority: body.verdict === "PASS" ? 4 : 1 });
   }
 
-  const detailWithTask = { ...body, _clickup_task_id: taskId, _filed: !!body._finalize || (existing.length && existing[0].detail && existing[0].detail._filed) || false };
+  const detailWithTask = { ...body, _clickup_task_id: taskId, _action_subtask_ids: actionSubtaskIds, _filed: !!body._finalize || (existing.length && existing[0].detail && existing[0].detail._filed) || false };
   const row = {
     id: pipId,
     editor_id: pipSlug || body.editor_id || null,
@@ -20735,6 +21414,12 @@ var index_default = {
       if (path === "/config/sync" && request.method === "POST") {
         return await handleConfigSync(env, await request.json());
       }
+      if (path === "/whoami" && request.method === "GET") {
+        return await handleWhoAmI(env, url.searchParams.get("t"));
+      }
+      if (path === "/peer/my-assignments" && request.method === "GET") {
+        return await handleMyPeerAssignments(env, url.searchParams.get("t"), url.searchParams.get("cycle"));
+      }
       if (path === "/kpi/next-id" && request.method === "GET") {
         return await handleKpiNextId(env, url.searchParams.get("quarter"), url.searchParams.get("editor"));
       }
@@ -20744,20 +21429,60 @@ var index_default = {
       if (path === "/peer/aggregate" && request.method === "GET") {
         return await handlePeerAggregate(env, url.searchParams.get("target"), url.searchParams.get("cycle"), url.searchParams.get("key"));
       }
+      if (path === "/kpi/cases" && request.method === "GET") {
+        return await handleKpiCases(env, url.searchParams.get("cycle"), url.searchParams.get("key"));
+      }
+      const kpiDelMatch = path.match(/^\/kpi\/cases\/([^/]+)$/);
+      if (kpiDelMatch && request.method === "DELETE") {
+        return await handleDeleteKpiCase(env, decodeURIComponent(kpiDelMatch[1]), url.searchParams.get("key"));
+      }
       if (path.match(/^\/kpi\/[^/]+$/) && request.method === "GET") {
         return await handleKpiGet(env, decodeURIComponent(path.split("/")[2]));
       }
       if (path === "/kpi/editor" && request.method === "POST") {
         return await handleKpiEditor(env, await request.json());
       }
-      if (path === "/kpi/supervisor" && request.method === "POST") {
-        return await handleKpiSupervisor(env, await request.json());
-      }
       if (path === "/kpi/finalize" && request.method === "POST") {
         return await handleKpiFinalize(env, await request.json());
       }
+      if (path === "/kpi/create-link-task" && request.method === "POST") {
+        const body = await request.json();
+        return await handleCreateKpiLinkTask(env, { ...body, key: body.key || url.searchParams.get("key") });
+      }
       if (path === "/submit/peer" && request.method === "POST") {
         return await handleSubmitPeer(env, await request.json());
+      }
+      if (path === "/peer/rater-links" && request.method === "GET") {
+        return await handleAllRaterLinks(env, url.searchParams.get("key"));
+      }
+      if (path === "/peer/rater-link" && request.method === "GET") {
+        return await handleRaterLink(env, url.searchParams.get("editor"), url.searchParams.get("key"));
+      }
+      if (path === "/peer/assignments" && request.method === "GET") {
+        return await handleListAssignments(env, url.searchParams.get("cycle"), url.searchParams.get("key"));
+      }
+      if (path === "/peer/assignments" && request.method === "POST") {
+        const body = await request.json();
+        return await handleCreateAssignment(env, { ...body, key: body.key || url.searchParams.get("key") });
+      }
+      const assignDelMatch = path.match(/^\/peer\/assignments\/([^/]+)$/);
+      if (assignDelMatch && request.method === "DELETE") {
+        return await handleDeleteAssignment(env, assignDelMatch[1], url.searchParams.get("key"));
+      }
+      if (path === "/peer/create-link-task" && request.method === "POST") {
+        const body = await request.json();
+        return await handleCreatePeerLinkTask(env, { ...body, key: body.key || url.searchParams.get("key") });
+      }
+      if (path === "/pip/cases" && request.method === "GET") {
+        return await handlePipCases(env, url.searchParams.get("key"));
+      }
+      const pipDelMatch = path.match(/^\/pip\/cases\/([^/]+)$/);
+      if (pipDelMatch && request.method === "DELETE") {
+        return await handleDeletePipCase(env, decodeURIComponent(pipDelMatch[1]), url.searchParams.get("key"));
+      }
+      if (path === "/pip/create-link-task" && request.method === "POST") {
+        const body = await request.json();
+        return await handleCreatePipLinkTask(env, { ...body, key: body.key || url.searchParams.get("key") });
       }
        if (path === "/pip/open" && request.method === "GET") {
         return await handlePipOpen(env, url.searchParams.get("editor"));

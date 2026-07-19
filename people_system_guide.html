@@ -1,0 +1,275 @@
+<meta charset="utf-8">
+<title>Planaria People System — team guide</title>
+<style>
+:root{
+  --canvas:#f7f7f8; --card:#ffffff; --ink:#17191d; --muted:#6b7280; --line:#e6e8eb;
+  --kpi:#4f46e5; --kpi-soft:#eef0fe; --kpi-line:#d9dcfb;
+  --peer:#0d9488; --peer-soft:#e6f5f3; --peer-line:#c8ece7;
+  --pip:#b45309; --pip-soft:#fdf3e8; --pip-line:#f0d9b8;
+  --lo:#e0603b; --mid:#e3a008; --hi:#2f9e7e;
+  --r-card:14px; --r-ctl:9px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --canvas:#111214; --card:#1a1b1e; --ink:#eef0f2; --muted:#9aa1ab; --line:#2b2d31;
+    --kpi:#8b85f0; --kpi-soft:#20213a; --kpi-line:#34365a;
+    --peer:#4fd3c4; --peer-soft:#122726; --peer-line:#1e3d3a;
+    --pip:#e0a463; --pip-soft:#2a1f14; --pip-line:#4a3620;
+    --lo:#f0876a; --mid:#f0c25a; --hi:#5cd6ac;
+  }
+}
+:root[data-theme="dark"]{
+  --canvas:#111214; --card:#1a1b1e; --ink:#eef0f2; --muted:#9aa1ab; --line:#2b2d31;
+  --kpi:#8b85f0; --kpi-soft:#20213a; --kpi-line:#34365a;
+  --peer:#4fd3c4; --peer-soft:#122726; --peer-line:#1e3d3a;
+  --pip:#e0a463; --pip-soft:#2a1f14; --pip-line:#4a3620;
+  --lo:#f0876a; --mid:#f0c25a; --hi:#5cd6ac;
+}
+:root[data-theme="light"]{
+  --canvas:#f7f7f8; --card:#ffffff; --ink:#17191d; --muted:#6b7280; --line:#e6e8eb;
+  --kpi:#4f46e5; --kpi-soft:#eef0fe; --kpi-line:#d9dcfb;
+  --peer:#0d9488; --peer-soft:#e6f5f3; --peer-line:#c8ece7;
+  --pip:#b45309; --pip-soft:#fdf3e8; --pip-line:#f0d9b8;
+  --lo:#e0603b; --mid:#e3a008; --hi:#2f9e7e;
+}
+*{box-sizing:border-box}
+body{margin:0}
+.guide{
+  background:var(--canvas); color:var(--ink);
+  font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+  font-size:15.5px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  font-feature-settings:"tnum" 1; font-variant-numeric:tabular-nums;
+  padding:0 0 4rem;
+}
+.wrap{max-width:760px; margin:0 auto; padding:0 20px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.masthead{padding:2.6rem 0 1.6rem; border-bottom:1px solid var(--line)}
+.eyebrow{font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:var(--muted)}
+.masthead h1{margin:.4rem 0 .5rem; font-size:28px; font-weight:700; letter-spacing:-.02em; text-wrap:balance}
+.masthead p{margin:0; color:var(--muted); font-size:15px; max-width:56ch}
+
+.nav{position:sticky; top:0; z-index:5; background:color-mix(in srgb, var(--canvas) 88%, transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex; gap:4px; overflow-x:auto; padding:10px 20px}
+.nav a{flex:0 0 auto; font-size:13px; font-weight:600; color:var(--muted); text-decoration:none; padding:7px 12px; border-radius:99px; white-space:nowrap}
+.nav a:hover, .nav a:focus-visible{color:var(--ink); background:var(--card)}
+.nav a:focus-visible{outline:2px solid var(--kpi); outline-offset:1px}
+
+.facts{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:1.6rem 0 2.4rem}
+.fact{background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:14px 16px}
+.fact .k{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px}
+.fact .v{font-size:14px; line-height:1.5}
+.scale-row{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap}
+.chip{font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:6px}
+.chip.lo{background:color-mix(in srgb, var(--lo) 18%, var(--card)); color:var(--lo)}
+.chip.mid{background:color-mix(in srgb, var(--mid) 22%, var(--card)); color:color-mix(in srgb, var(--mid) 65%, var(--ink))}
+.chip.hi{background:color-mix(in srgb, var(--hi) 18%, var(--card)); color:var(--hi)}
+
+section.tool{margin:0 0 3rem; scroll-margin-top:64px}
+.tool-head{display:flex; align-items:baseline; gap:10px; margin-bottom:1rem}
+.tool-head .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto}
+.tool-head h2{margin:0; font-size:20px; font-weight:700; letter-spacing:-.01em}
+.tool-head .for{color:var(--muted); font-size:13.5px}
+
+.card{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:var(--r-card); padding:20px 22px; margin-bottom:14px}
+.card h3{margin:0 0 4px; font-size:14.5px; font-weight:700}
+.card .lede{color:var(--muted); font-size:13.5px; margin:0 0 14px}
+
+.steps{list-style:none; margin:0; padding:0; counter-reset:step}
+.steps li{counter-increment:step; display:flex; gap:12px; padding:10px 0; border-top:1px solid var(--line)}
+.steps li:first-child{border-top:0}
+.steps li::before{
+  content:counter(step); flex:0 0 auto; width:22px; height:22px; border-radius:50%;
+  background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; margin-top:1px;
+}
+.steps .body b{font-weight:700}
+.steps .body{font-size:14px}
+
+.note{display:flex; gap:10px; align-items:flex-start; font-size:13px; color:var(--ink); background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:10px; padding:11px 14px; margin-top:6px}
+.note b{font-weight:700}
+
+.idtag{display:inline-block; font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:12.5px; background:var(--canvas); border:1px solid var(--line); border-radius:6px; padding:2px 7px; color:var(--ink)}
+
+.faq{border-top:1px solid var(--line); padding-top:6px}
+.faq details{border-bottom:1px solid var(--line); padding:14px 0}
+.faq summary{cursor:pointer; font-weight:650; font-size:14.5px; list-style:none; display:flex; justify-content:space-between; gap:12px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+"; color:var(--muted); font-weight:400; font-size:18px}
+.faq details[open] summary::after{content:"–"}
+.faq p{margin:10px 0 0; color:var(--muted); font-size:13.5px}
+
+.feedback{margin-top:2.4rem; padding:18px 22px; border-radius:var(--r-card); background:var(--card); border:1px dashed var(--line); text-align:center}
+.feedback b{color:var(--ink)}
+.feedback p{margin:.35rem 0 0; color:var(--muted); font-size:13.5px}
+
+@media(max-width:560px){
+  .facts{grid-template-columns:1fr}
+  .masthead h1{font-size:24px}
+}
+@media print{
+  .nav{position:static; backdrop-filter:none}
+  .faq details > *{display:block !important}
+  .faq summary{cursor:default}
+  .faq summary::after{display:none}
+  section.tool{break-inside:avoid-page}
+  .card{break-inside:avoid-page}
+}
+</style>
+
+<div class="guide">
+  <h2 class="sr-only">Guide to the Planaria People System: how KPI Scorecard, Peer Appraisal, and PIP work and how to fill them in.</h2>
+
+  <nav class="nav" aria-label="Section jump links">
+    <div class="wrap">
+      <a href="#overview">Overview</a>
+      <a href="#kpi">KPI Scorecard</a>
+      <a href="#peer">Peer Appraisal</a>
+      <a href="#pip">PIP</a>
+      <a href="#faq">FAQ</a>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    <header class="masthead" id="overview">
+      <div class="eyebrow">Planaria People System · team guide · draft v1</div>
+      <h1>How the three tools work, and how to fill them in</h1>
+      <p>Three instruments, one rating scale. This page walks through what each one is for and the exact steps to complete it — skim the section for whichever one you've been asked to open.</p>
+    </header>
+
+    <div class="facts">
+      <div class="fact">
+        <div class="k">Rating scale</div>
+        <div class="v">1 to 5, used everywhere</div>
+        <div class="scale-row">
+          <span class="chip lo">1–2 low</span>
+          <span class="chip mid">3 fair</span>
+          <span class="chip hi">4–5 high</span>
+        </div>
+      </div>
+      <div class="fact">
+        <div class="k">Pass bar</div>
+        <div class="v">3.0 (Fair) on KPI and PIP.<br>Peer Appraisal has no pass bar — it's developmental, not a score you clear.</div>
+      </div>
+      <div class="fact">
+        <div class="k">Career ladder</div>
+        <div class="v">Intern → Jr → Associate (Video Editor) → Senior → <em>Supervisor or Principal</em> (parallel tracks, same weight)</div>
+      </div>
+    </div>
+
+    <section class="tool" id="kpi" style="--accent:var(--kpi); --accent-soft:var(--kpi-soft); --accent-line:var(--kpi-line)">
+      <div class="tool-head">
+        <span class="dot" style="background:var(--kpi)"></span>
+        <h2>KPI Scorecard</h2>
+        <span class="for">quarterly review · editor + supervisor</span>
+      </div>
+
+      <div class="card">
+        <h3>If you're the editor</h3>
+        <p class="lede">You rate yourself first. Once you lock it, your side is final — supervisors take over from there.</p>
+        <ol class="steps">
+          <li class="body">Open the form and choose <b>I'm the editor</b>.</li>
+          <li class="body">Pick your name, then the quarter — a <b>Q1–Q4</b> dropdown plus the year, not typed freely.</li>
+          <li class="body">Work through each category: rate yourself 1–5 and add a short note with real examples for each metric.</li>
+          <li class="body">On the last step, name your own growth focus for next quarter and answer the written questions.</li>
+          <li class="body"><b>Lock your scores.</b> This can't be undone from your side — it hands off to your supervisor(s).</li>
+          <li class="body">Copy the case link shown after locking and send it to whoever is supervising you.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>If you're the supervisor</h3>
+        <p class="lede">You score independently — you won't see other supervisors' scores until you file.</p>
+        <ol class="steps">
+          <li class="body">Choose <b>I'm a supervisor</b> and enter the supervisor password when asked (ask your lead if you don't have it).</li>
+          <li class="body">Pick the editor and quarter, or open the case link they sent you directly.</li>
+          <li class="body">Their case only loads once they've locked their side — if it hasn't, you'll see a note telling you to wait.</li>
+          <li class="body">Rate each metric yourself; the editor's self-score shows alongside as a read-only reference, not something you edit.</li>
+          <li class="body">Add your written assessment, then <b>submit your scores</b>. Up to three supervisors can score the same case.</li>
+          <li class="body">Any one supervisor can then <b>file to ClickUp</b> — the official score is the mean of every supervisor who submitted.</li>
+        </ol>
+        <div class="note"><b>Note —</b> the supervisor stage is password-gated so an editor can't land there by accident and see the scoring screen meant for someone else.</div>
+      </div>
+    </section>
+
+    <section class="tool" id="peer" style="--accent:var(--peer); --accent-soft:var(--peer-soft); --accent-line:var(--peer-line)">
+      <div class="tool-head">
+        <span class="dot" style="background:var(--peer)"></span>
+        <h2>Peer Appraisal</h2>
+        <span class="for">anonymous · rated by colleagues who work with you often</span>
+      </div>
+
+      <div class="card">
+        <h3>Getting your link</h3>
+        <p class="lede">You don't sign up — you're assigned. A supervisor picks who rates whom each cycle and sends you a personal link.</p>
+        <div class="note"><b>One link, forever.</b> The same link works for every peer you're ever asked to rate — you don't need a new one each cycle.</div>
+      </div>
+
+      <div class="card">
+        <h3>Filling it in</h3>
+        <ol class="steps">
+          <li class="body">Open your personal link and pick who you're rating, plus the cycle (Q1–Q4 + year).</li>
+          <li class="body">For each value, compare where they are <b>now</b> against the <b>next level</b> anchors shown, then rate 1–5.</li>
+          <li class="body">Write one key strength and one thing to grow — specific and observed, not general.</li>
+          <li class="body">Rating a <b>senior</b>? You'll also be asked which way they seem to be growing: IC track, Management track, or too early to say.</li>
+          <li class="body">Review your ratings, confirm the anonymity statement, and submit.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="note"><b>Your rating is anonymous.</b> The pooled report for that person stays hidden until at least two peers have rated them in the same cycle — so a single rating can never be traced back to you.</div>
+      </div>
+    </section>
+
+    <section class="tool" id="pip" style="--accent:var(--pip); --accent-soft:var(--pip-soft); --accent-line:var(--pip-line)">
+      <div class="tool-head">
+        <span class="dot" style="background:var(--pip)"></span>
+        <h2>PIP</h2>
+        <span class="for">Performance Improvement Plan · filled with the editor, not about them alone</span>
+      </div>
+
+      <div class="card">
+        <h3>What it is</h3>
+        <p class="lede">A single working document a manager and editor build together when someone needs formal, time-boxed support to hit the bar — not a one-time form, a live case you keep coming back to.</p>
+      </div>
+
+      <div class="card">
+        <h3>Filling it in</h3>
+        <ol class="steps">
+          <li class="body">Pick the editor, the severity, and a start date — duration and review date fill in automatically from those.</li>
+          <li class="body"><b>Gaps &amp; targets:</b> list each competency that's below bar, with evidence, a measurable target, and what support the company provides.</li>
+          <li class="body"><b>Actions:</b> what the editor will do and what the company provides, each with a date.</li>
+          <li class="body"><b>Checkpoints:</b> dated check-ins fill in automatically from the start date — log on-track status and notes as you go.</li>
+          <li class="body"><b>Outcome:</b> once scores are in, the verdict (Pass / Not Met) calculates itself — pick the matching result and write the summary.</li>
+          <li class="body"><b>Save progress</b> any time — it's the same case link every time you come back. <b>File verdict</b> only once you've reached a final call; this closes the case for good.</li>
+        </ol>
+        <div class="note"><b>If the auto-verdict and your chosen result don't match</b> (e.g. verdict says Pass but you pick Exit), the form will stop and ask you to confirm before filing — it never resolves the conflict silently.</div>
+      </div>
+    </section>
+
+    <section id="faq" class="faq">
+      <div class="eyebrow" style="margin-bottom:10px">A few things people ask</div>
+      <details open>
+        <summary>What if I click into the wrong side by mistake?</summary>
+        <p>On the KPI form, if an editor ends up on the supervisor screen, there's a link back to self-review right there — no need to close and reopen the page.</p>
+      </details>
+      <details open>
+        <summary>What does a case ID like <span class="idtag">KPI-2026-Q3-Fitra-Pratama-01</span> mean?</summary>
+        <p>Instrument, year, quarter, the editor's first and last name, then a running number for that quarter. Same pattern for PIP. You'll see it on the form once you've picked an editor and quarter — it's how you and your supervisor find the same case again.</p>
+      </details>
+      <details open>
+        <summary>I saved progress on a PIP or supervisor score — how do I get back to it?</summary>
+        <p>Every save shows a case link. Bookmark it or keep it in the message thread — opening that link loads everything you'd already entered.</p>
+      </details>
+      <details open>
+        <summary>Where do I check the full rubric wording?</summary>
+        <p>Every form links to "View full rubric" — the same reference table for all six levels, kept in sync with what the forms actually use.</p>
+      </details>
+    </section>
+
+    <div class="feedback">
+      <b>This is a first draft.</b>
+      <p>Flag anything unclear, missing, or wrong before it's finalized — this guide will be updated from that feedback.</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,17 @@
+{
+  "name": "planaria-people-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Planaria Studio performance-management system (KPI / Peer Appraisal / PIP). Cloudflare Worker + Supabase + ClickUp + static GitHub Pages forms.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test",
+    "verify": "npm run check && npm test",
+    "predeploy": "npm run verify",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

@@ -14,89 +14,27 @@ body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Inter',-app
 .wrap{max-width:820px;margin:0 auto;padding:32px 22px 80px}
 .print{text-align:right}.pbtn{font:inherit;font-size:12px;font-weight:600;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 13px;cursor:pointer;margin-bottom:10px}
 .doc{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--peer);border-radius:14px;overflow:hidden}
-.head{padding:24px 26px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
-.eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--peer)}
-h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:6px 0 0}
-.meta{font-size:13px;color:var(--muted);margin-top:6px}.meta b{color:var(--ink);font-weight:600}
-.overall{text-align:center;flex:0 0 auto}
-.overall .medal{border-radius:14px;padding:13px 22px;min-width:132px;background:#fff;border:1.5px solid var(--line);box-shadow:0 6px 18px rgba(23,25,29,.07)}
-.overall .medal.lo{border-color:#f0c2b5;background:#fdf3f0}
-.overall .medal.mid{border-color:#ecd7ac;background:#fbf4e7}
-.overall .medal.hi{border-color:#bde5d6;background:#eff9f4}
-.overall .lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.overall .big{font-size:42px;font-weight:800;letter-spacing:-.03em;line-height:1;color:var(--ink)}
-.overall .medal.lo .big{color:#c4381d}.overall .medal.mid .big{color:#b45309}.overall .medal.hi .big{color:#1c8a68}
-.overall .sub{font-size:11.5px;color:var(--muted);margin-top:3px;font-weight:600}
-.anon{display:flex;gap:10px;align-items:flex-start;background:var(--peer-bg);padding:12px 26px;font-size:12.5px;color:#0b6055;border-bottom:1px solid var(--line)}
-.anon b{color:#083f38}
+/* page chrome only -- the "Load a scorecard" bar and loading/error placeholders,
+   which render outside the shared peer_card.js module. The report content itself
+   (head, overall medal, clusters, values, etc.) is styled by peer_card.js so this
+   page and the ClickUp PDF can never drift apart -- see peer_card.js. */
 .section{padding:22px 26px;border-bottom:1px solid var(--line)}.section:last-child{border-bottom:none}
+.loadbar{background:var(--peer-bg)}
 .stitle{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
-.clusters{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-@media(max-width:640px){.clusters{grid-template-columns:1fr}}
-.cl{border:1px solid var(--line);border-radius:9px;padding:11px 13px}
-.cl .cn{font-size:12px;font-weight:650;color:var(--peer)}
-.cl .cm{display:flex;align-items:baseline;gap:6px;margin-top:3px}
-.cl .cm b{font-size:20px;font-weight:800;letter-spacing:-.02em}
-.cl .cm span{font-size:11px;color:var(--muted)}
-.val{padding:11px 0;border-bottom:1px solid #f1f2f4}.val:last-child{border-bottom:none}
-.vtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.vname{font-weight:600;font-size:13.5px}
-.vmean{font-weight:800;font-size:15px}
-.vmean.lo{color:var(--lo)}.vmean.mid{color:var(--mid-ink)}.vmean.hi{color:var(--hi)}
-.dist{display:flex;gap:3px;align-items:flex-end;height:34px}
-.dc{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px}
-.dc .b{width:100%;background:#eef0f2;border-radius:3px 3px 0 0;position:relative;min-height:2px}
-.dc .b.on1,.dc .b.on2{background:var(--lo)}.dc .b.on3{background:var(--mid)}.dc .b.on4,.dc .b.on5{background:var(--hi)}
-.dc .n{font-size:9px;color:var(--muted)}
-.clushd{grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--peer);margin:14px 0 2px;padding-top:4px}
-.clushd:first-child{margin-top:0}
-.track{border:1px solid var(--line);border-radius:10px;padding:16px;background:#fafafb}
-.track .q{font-size:13px;font-weight:600;margin-bottom:4px}
-.track .g{font-size:12px;color:var(--muted);margin-bottom:12px}
-.trbars{display:flex;flex-direction:column;gap:8px}
-.tr{display:grid;grid-template-columns:170px 1fr 34px;gap:10px;align-items:center;font-size:13px}
-.tr .lbl{font-weight:600}.tr .lbl.mg{color:var(--kpi)}.tr .lbl.ic{color:var(--peer)}.tr .lbl.un{color:var(--muted)}
-.tr .track-bar{height:16px;background:#eef0f2;border-radius:5px;overflow:hidden}
-.tr .track-fill{height:100%;border-radius:5px}
-.tr .track-fill.mg{background:var(--kpi)}.tr .track-fill.ic{background:var(--peer)}.tr .track-fill.un{background:#c3c7cd}
-.tr .cnt{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
-.lean{margin-top:12px;font-size:13px;padding:10px 12px;border-radius:8px;background:var(--peer-bg);color:#0b6055}
-.lean b{color:#083f38}
-.pooled{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px}
-.pooled .who{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.pooled ul{margin:0;padding-left:16px}.pooled li{margin:4px 0;font-size:13px}
-.foot{padding:16px 26px;font-size:11.5px;color:var(--muted);background:#fafafb}
 @media print{body{background:#fff}.print{display:none}.doc{border:none}}
-</style></head><body>
+</style>
+<script src="peer_card.js"></script>
+<script>document.write('<style>'+window.PEERCARD.css+'</style>');</script>
+</head><body>
 <div class="wrap">
 <div class="print"><button class="pbtn" onclick="window.print()">Save as PDF ↗</button></div>
 <div class="doc" id="doc"></div>
 </div>
 <script>
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
-const CLUSTERS=[
- ['Underdog Mindset',['Growth Potential','Agility','Continuous Improvement']],
- ['Selfless Collaboration',['Teamwork','Knowledge Sharing','Conflict Resolution']],
- ['Clarity',['Communication & Handoff','Visibility','Deep Dive']],
- ['Ownership',['Accountability','Reliability & Deadlines','Fill-the-Gap Attitude','Quality of Work']],
- ['True Leadership',['Integrity','Earn Trust']]
-];
-const LVLNAME={intern:'Intern',jr:'Junior',assoc:'Video Editor',ve:'Video Editor',senior:'Senior',supervisor:'Supervisor',principal:'Principal'};
-const band=s=>s<3?'lo':s<4?'mid':'hi';
-const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
-const fmt=x=>x.toFixed(2);
 const doc=document.getElementById('doc');
 const params=new URLSearchParams(location.search);
 const VIEW_KEY=params.get('key')||'';
-
-function distBars(scores){
- const c={1:0,2:0,3:0,4:0,5:0}; scores.forEach(s=>c[s]++);
- const max=Math.max(...Object.values(c),1);
- let h='<div class="dist">';
- for(let i=1;i<=5;i++){const ht=c[i]?Math.round(c[i]/max*28)+4:2;
-   h+=`<div class="dc"><div class="b on${i}" style="height:${ht}px" title="${c[i]} rated ${i}"></div><div class="n">${i}</div></div>`;}
- return h+'</div>';
-}
 
 async function fetchWithRetry(url,tries=4,delayMs=700){
   let e;for(let i=0;i<tries;i++){try{const r=await fetch(url);if(!r.ok&&r.status>=500)throw new Error('HTTP '+r.status);return r;}catch(x){e=x;if(i<tries-1)await new Promise(rs=>setTimeout(rs,delayMs*(i+1)));}}throw e;
@@ -104,13 +42,18 @@ async function fetchWithRetry(url,tries=4,delayMs=700){
 
 function pickerHtml(roster,selSlug,cycle){
  const opts=roster.map(r=>`<option value="${r.id}" ${r.id===selSlug?'selected':''}>${r.name}</option>`).join('');
- return `<div class="section print"><div class="stitle">Load a scorecard</div>
+ const cm=/Q([1-4])\s+(\d{4})/.exec(cycle||'');const cq=cm?('Q'+cm[1]):'';const cyy=cm?cm[2]:'';
+ const qopts=['Q1','Q2','Q3','Q4'].map(q=>`<option ${q===cq?'selected':''}>${q}</option>`).join('');
+ return `<div class="section loadbar print"><div class="stitle">Load a scorecard</div>
    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
      <div style="flex:1;min-width:180px"><label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Peer</label>
        <select id="gvTarget" style="width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff"><option value="">— select —</option>${opts}</select></div>
-     <div style="width:130px"><label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Cycle</label>
-       <input id="gvCycle" maxlength="9" value="${cycle}" style="width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff"></div>
-     <button id="gvLoad" class="pbtn" style="padding:10px 18px">Load</button>
+     <div style="width:190px"><label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Cycle</label>
+       <div style="display:flex;gap:6px">
+         <select id="gvCycleQ" style="flex:0 0 76px;font:inherit;font-size:13.5px;padding:9px 8px;border:1px solid var(--line);border-radius:9px;background:#fff"><option value="">Q…</option>${qopts}</select>
+         <input id="gvCycleY" inputmode="numeric" maxlength="4" placeholder="Year" value="${cyy}" style="flex:1;min-width:0;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff"></div></div>
+     <div style="flex:0 0 auto"><label style="display:block;font-size:11px;font-weight:600;color:transparent;margin-bottom:5px" aria-hidden="true">·</label>
+       <button id="gvLoad" class="pbtn" style="margin-bottom:0;padding:10px 18px;white-space:nowrap;background:var(--peer);color:#fff;border-color:var(--peer);font-weight:650">Load</button></div>
    </div></div>`;
 }
 
@@ -128,13 +71,14 @@ async function boot(){
 }
 function shell(selSlug,cycle){
   doc.innerHTML=pickerHtml(ROSTER,selSlug,cycle)+'<div id="gvBody"><div class="section"><div class="stitle">Pick a peer + cycle</div><p style="font-size:13px;color:var(--muted)">The pooled scorecard loads here. Nothing is attributed to any rater.</p></div></div>';
+  const gvCycleVal=()=>{const q=document.getElementById('gvCycleQ'),y=document.getElementById('gvCycleY');return (q.value&&y.value.length===4)?(q.value+' '+y.value):'';};
   document.getElementById('gvLoad').onclick=()=>{
-    const s=document.getElementById('gvTarget').value,cy=document.getElementById('gvCycle').value.trim().toUpperCase();
-    if(!s||!cy){alert('Pick a peer and a cycle first.');return;}
+    const s=document.getElementById('gvTarget').value,cy=gvCycleVal();
+    if(!s||!cy){alert('Pick a peer, a quarter, and a 4-digit year first.');return;}
     const u=new URL(location.href);u.searchParams.set('target',s);u.searchParams.set('cycle',cy);history.replaceState(null,'',u);
     load(s,cy);
   };
-  document.getElementById('gvCycle').addEventListener('input',e=>{const p=e.target.selectionStart;e.target.value=e.target.value.toUpperCase();e.target.setSelectionRange(p,p);});
+  document.getElementById('gvCycleY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);});
 }
 async function load(slug,cycle){
   const body=document.getElementById('gvBody');
@@ -144,69 +88,17 @@ async function load(slug,cycle){
     const r=await fetch(u);const j=await r.json();
     if(r.status===403){body.innerHTML='<div class="section"><div class="stitle" style="color:var(--lo)">Access key required</div><p style="font-size:13px">Open this page with your ?key= link from the admin.</p></div>';return;}
     if(!r.ok)throw new Error(j.error||r.status);
+    if(j.held){body.innerHTML=`<div class="section"><div class="stitle">Held for confidentiality</div><p style="font-size:13px;color:var(--muted)"><b>${j.n}</b> peer response so far for <b>${cycle}</b>. The pooled scorecard unlocks once at least <b>${j.min_n||2}</b> peers have responded, so no single rating can be traced back to anyone.</p></div>`;return;}
     if(!j.found||!j.n){body.innerHTML=`<div class="section"><div class="stitle">No responses yet</div><p style="font-size:13px;color:var(--muted)">No peer responses recorded for this peer in <b>${cycle}</b>.</p></div>`;return;}
     render(j,body);
   }catch(e){body.innerHTML='<div class="section"><div class="stitle" style="color:var(--lo)">Failed to load</div><p style="font-size:13px">'+e.message+'</p></div>';}
 }
 
+// Rendering itself lives in peer_card.js -- shared with the worker's PDF copy so
+// this view and the ClickUp attachment can never show different-looking reports
+// for the same data. This function only wraps the module's output for the page.
 function render(S,body){
- const V={};(S.values||[]).forEach(v=>V[v.name]=v.scores||[]);
- const known=CLUSTERS.flatMap(c=>c[1]).filter(n=>V[n]&&V[n].length);
- const extras=(S.values||[]).map(v=>v.name).filter(n=>!CLUSTERS.some(c=>c[1].includes(n)));
- const allVals=[...known,...extras];
- if(!allVals.length){body.innerHTML='<div class="section"><div class="stitle">No score data</div></div>';return;}
- const overall=mean(allVals.map(v=>mean(V[v])));
- let clhtml='';
- CLUSTERS.forEach(([cn,vals])=>{
-   const have=vals.filter(v=>V[v]&&V[v].length);if(!have.length)return;
-   const cm=mean(have.map(v=>mean(V[v])));
-   clhtml+=`<div class="cl"><div class="cn">${cn}</div><div class="cm"><b style="color:var(--${band(cm)==='hi'?'hi':band(cm)==='mid'?'mid-ink':'lo'})">${fmt(cm)}</b><span>cluster mean</span></div></div>`;
- });
- let vhtml='';
- CLUSTERS.forEach(([cn,vals])=>{
-   const have=vals.filter(v=>V[v]&&V[v].length);if(!have.length)return;
-   vhtml+=`<div class="clushd" style="grid-column:auto">${cn}</div>`;
-   have.forEach(v=>{const m=mean(V[v]);
-     vhtml+=`<div class="val"><div class="vtop"><span class="vname">${v}</span><span class="vmean ${band(m)}">${fmt(m)}</span></div>${distBars(V[v])}</div>`;});
- });
- if(extras.length){
-   vhtml+=`<div class="clushd" style="grid-column:auto">Other values</div>`;
-   extras.forEach(v=>{const m=mean(V[v]);vhtml+=`<div class="val"><div class="vtop"><span class="vname">${v}</span><span class="vmean ${band(m)}">${fmt(m)}</span></div>${distBars(V[v])}</div>`;});
- }
- let trackHtml='';
- if(S.level==='senior' && S.track_reco){
-   const t=S.track_reco, tot=(t.mg||0)+(t.ic||0)+(t.unsure||0);
-   const row=(cls,lbl,c)=>`<div class="tr"><span class="lbl ${cls}">${lbl}</span><div class="track-bar"><div class="track-fill ${cls}" style="width:${tot?Math.round(c/tot*100):0}%"></div></div><span class="cnt">${c}</span></div>`;
-   const lead = (t.mg||0)>=(t.ic||0) ? 'Management → Supervisor' : 'IC → Principal';
-   trackHtml=`<div class="section"><div class="stitle">Track fit · peers' read</div>
-     <div class="track"><div class="q">Which way is this senior growing?</div>
-     <div class="g">Aggregated peer recommendations. Developmental signal to inform the track decision — not a verdict.</div>
-     <div class="trbars">${row('mg','Management → Supervisor',t.mg||0)}${row('ic','IC → Principal',t.ic||0)}${row('un','Too early to say',t.unsure||0)}</div>
-     ${tot?`<div class="lean">Peers lean <b>${lead}</b> (${Math.max(t.mg||0,t.ic||0)} of ${tot}).</div>`:''}
-     </div></div>`;
- }
- const li=x=>'<li>'+String(x).replace(/</g,'&lt;')+'</li>';
- const pooled=(S.pooled_strengths&&S.pooled_strengths.length)||(S.pooled_constructive&&S.pooled_constructive.length)
-   ?`<div class="section"><div class="stitle">Pooled feedback</div>
-    ${S.pooled_strengths&&S.pooled_strengths.length?`<div class="pooled"><div class="who">Strengths</div><ul>${S.pooled_strengths.map(li).join('')}</ul></div>`:''}
-    ${S.pooled_constructive&&S.pooled_constructive.length?`<div class="pooled"><div class="who">To grow</div><ul>${S.pooled_constructive.map(li).join('')}</ul></div>`:''}
-  </div>`:'';
- body.innerHTML=`
-  <div class="head">
-    <div><div class="eyebrow">Peer Scorecard · developmental</div>
-      <h1>${S.ratee}</h1>
-      <div class="meta"><b>${LVLNAME[S.level]||S.level||'—'}</b> · ${S.cycle} · aggregated from <b>${S.n}</b> peer response${S.n>1?'s':''}</div>
-    </div>
-    <div class="overall"><div class="medal ${band(overall)}"><div class="lbl">Overall</div>
-      <div class="big">${fmt(overall)}</div>
-      <div class="sub">mean of ${allVals.length} values</div></div></div>
-  </div>
-  <div class="anon"><div><b>Pooled from all responses.</b> With one response, the report reflects that rating directly; with more than one, scores are averaged into the view below. Score bars are shuffled so no rater's row can be reconstructed. This is developmental input, not a disciplinary record.</div></div>
-  <div class="section"><div class="stitle">Cluster means</div><div class="clusters">${clhtml}</div></div>
-  <div class="section"><div class="stitle">By value · mean + how peers rated (1&ndash;5)</div>${vhtml}</div>
-  ${trackHtml}
-  ${pooled}
-  <div class="foot">Peer Scorecard · live pooled data · comments pooled when n&gt;1.</div>`;
+  body.innerHTML='<div class="peercard">'+window.PEERCARD.html(S)+'</div>';
 }
 boot();
 </script>

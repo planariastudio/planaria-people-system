@@ -1,0 +1,25 @@
+name: CI
+
+# Gates every push and PR: the syntax check that would have caught the 2026-07-17
+# broken-worker deploy, plus the specification tests guarding the correctness fixes
+# (KPI idempotency, case-ID race) and the peer-assignments batching refactor.
+# Nothing here deploys — deploy stays a deliberate `npm run deploy` (or paste).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Syntax check (worker ESM + pages + shared modules)
+        run: node scripts/check.mjs
+      - name: Tests
+        run: node --test

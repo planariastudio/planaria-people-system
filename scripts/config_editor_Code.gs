@@ -55,12 +55,21 @@ function props_() {
   if (!url || !token) throw new Error("Set WORKER_URL and CONFIG_SYNC_TOKEN in Script Properties first.");
   return { url, token };
 }
+// Pull is a read from the public GET /config endpoint -- it needs WORKER_URL
+// but never the sync token, unlike syncConfig() which writes and must prove
+// it's authorized. Using props_() here would wrongly block a pull-only setup
+// that never got round to setting CONFIG_SYNC_TOKEN.
+function urlProp_() {
+  const url = PropertiesService.getScriptProperties().getProperty("WORKER_URL");
+  if (!url) throw new Error("Set WORKER_URL in Script Properties first.");
+  return url;
+}
 
 // ---------------------------------------------------------------------------
 // PULL: live /config -> sheet tabs
 // ---------------------------------------------------------------------------
 function pullConfig() {
-  const { url } = props_();
+  const url = urlProp_();
   const res = UrlFetchApp.fetch(url + "/config", { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) {
     SpreadsheetApp.getUi().alert("Could not pull config: " + res.getContentText());
@@ -177,6 +186,13 @@ function syncConfig() {
   if (levelRows) payload.levels = levelRows.map(r => ({
     key: String(r.key).trim(), label: r.label, sort_order: Number(r.sort_order)
   }));
+  // Rubric tabs' level columns are headed by these labels (see writeRubric_/
+  // readRubric_) -- refresh from the sheet's own Config_Levels first, so a
+  // customized label still matches the column it was actually written under.
+  if (payload.levels) {
+    LEVEL_LABELS = {};
+    payload.levels.forEach(l => { LEVEL_LABELS[l.key] = l.label; });
+  }
 
   payload.kpi_rubric = readRubric_(ss, "Config_KPI", ["id", "category", "metric"]);
   payload.peer_rubric = readRubric_(ss, "Config_Peer", ["id", "cluster", "value"]);
@@ -318,7 +334,12 @@ function readRubric_(ss, tabName, baseHeaders) {
     baseHeaders.forEach(h => { rec[h] = h === "id" ? Number(row[h]) : row[h]; });
     const levels = {};
     LEVEL_KEYS.forEach(k => {
-      const cell = row[k];
+      // Columns are written using the human label (LEVEL_LABELS), not the raw
+      // key -- e.g. "jr" is written as header "Junior". Must read back by the
+      // same label or every level column comes back empty and sync gets
+      // blocked with "no bullet text in ANY level column" for every row.
+      const header = LEVEL_LABELS[k] || k;
+      const cell = row[header];
       if (cell === "" || cell === null || cell === undefined) { levels[k] = []; return; }
       levels[k] = String(cell).split("\n")
         .map(s => s.replace(/^[\s•·\-\*]+/, "").trim())

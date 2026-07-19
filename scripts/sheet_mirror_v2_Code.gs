@@ -15,8 +15,9 @@
  * 2. Extensions -> Apps Script -> paste this whole file in, replacing the default code.
  * 3. Deploy -> New deployment -> Web app -> Execute as: Me -> Who has access: Anyone.
  * 4. Copy the /exec URL -> put it in Cloudflare as the SHEET_WEBHOOK_URL secret.
- * 5. Peer_Assignments is NOT auto-filled -- it's your manual rater-matrix
- *    planning tab, same as in the original xlsx. Fill it in yourself.
+ * 5. Peer_Assignments is LEGACY -- rater assignment now lives in the
+ *    links_admin.html portal (Supabase-backed), not this tab. This script never
+ *    reads or writes it; kept only for historical reference in the sheet.
  * 6. Peer_Summary and KPI_Summary formulas auto-extend as new editors show
  *    up in the raw data (see ensureSummaryRow below) -- you don't need to
  *    add rows by hand.

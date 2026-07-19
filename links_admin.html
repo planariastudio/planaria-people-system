@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planaria People System — admin</title>
+<style>
+  :root{
+    /* ===== SHARED VISUAL CONTRACT — identical across all six People System files ===== */
+    --canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;
+    --kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+    --lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;
+    --accent:var(--peer);--accent-soft:#e9f6f4;--r:10px;
+  }
+  *{box-sizing:border-box}html,body{margin:0}
+  body{font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;background:var(--canvas);color:var(--ink);font-size:15px;line-height:1.5}
+  .wrap{max-width:960px;margin:0 auto;padding:26px 18px 80px}
+  .mast{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:30px}
+  h1{margin:0;font-size:24px;letter-spacing:-.02em}
+  h2{margin:0;font-size:18px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13.5px;margin:6px 0 0;max-width:62ch}
+  .adminchip{flex:0 0 auto;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--card);border:1px solid var(--line);padding:5px 11px;border-radius:99px;white-space:nowrap;margin-top:3px}
+  .section{margin-bottom:36px}
+  .seyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--sa);margin-bottom:7px}
+  .seyebrow::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--sa)}
+  .section .lede{color:var(--muted);font-size:13px;margin:5px 0 14px;max-width:74ch}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-weight:650;font-size:12.5px;padding:3px 9px;border-radius:99px}
+  .pill.done{background:#e6f6f0;color:var(--hi)}
+  .pill.pending{background:#f4f5f7;color:var(--muted)}
+  .pill.pass{background:#e6f6f0;color:var(--hi)}
+  .pill.fail{background:#fbeae5;color:var(--lo)}
+  .caselink{font-size:12px;color:var(--sa,var(--kpi));text-decoration:none;font-weight:600;white-space:nowrap}
+  .caselink:hover{text-decoration:underline}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .f{flex:1;min-width:160px}
+  .f label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-bottom:5px}
+  .f select,.f input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff}
+  .qsel{display:flex;gap:6px}.qsel select{flex:0 0 78px}.qsel input{flex:1;min-width:0}
+  .btn{padding:10px 16px;border-radius:8px;font:inherit;font-weight:650;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn.kpi{background:var(--kpi);color:#fff;border-color:var(--kpi)}
+  .btn.pip{background:var(--pip);color:#fff;border-color:var(--pip)}
+  .btn:disabled{opacity:.5;cursor:default}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:9px 10px;border-bottom:1px solid var(--line)}
+  td{padding:10px;border-bottom:1px solid #f1f2f4;vertical-align:middle}
+  .status{display:inline-flex;align-items:center;gap:6px;font-weight:650;font-size:12.5px;padding:3px 9px;border-radius:99px}
+  .status.done{background:#e6f6f0;color:var(--hi)}
+  .status.pending{background:#f4f5f7;color:var(--muted)}
+  .linkcell{display:flex;gap:6px;align-items:center;margin-top:4px}
+  .linkcell input{flex:1;min-width:0;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:11.5px;background:#f8f9fa;color:#374151}
+  .linklabel{font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;color:var(--muted)}
+  .mini{padding:6px 10px;font-size:12px}
+  .empty{color:var(--muted);font-size:13px;padding:20px;text-align:center}
+  .err{color:var(--lo);font-size:12.5px;font-weight:600;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="appWrap" class="wrap">
+  <div class="mast">
+    <div>
+      <h1>Planaria People System — admin</h1>
+      <div class="sub">Hand out personal links, and track every KPI, Peer, and PIP case — the trackers update on their own.</div>
+    </div>
+    <span class="adminchip">Admin only · unlisted</span>
+  </div>
+  <div id="bootBanner"></div>
+
+  <div class="section" style="--sa:var(--kpi)">
+    <div class="seyebrow">KPI</div>
+    <h2>Personal links</h2>
+    <p class="lede">One reusable link per person for their own KPI self-review — opening it locks the form to just them, so nobody can fill in anyone else's. The same token also powers their Peer Appraisal link, shown in the rater assignments below. <b>Add task in ClickUp</b> creates a real task with the link attached, assigned to them, scoped to whichever quarter is picked in the Case tracker below — so the link is only ever discovered by clicking through from ClickUp.</p>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>Name</th><th style="min-width:340px">KPI self-review link</th></tr></thead>
+        <tbody id="linkRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section" style="--sa:var(--kpi)">
+    <div class="seyebrow">KPI</div>
+    <h2>Case tracker</h2>
+    <p class="lede">Pick a quarter to see every KPI case for it — who's locked their self-review, who's been scored, and the official result. Nothing to fill in; it reflects the live cases.</p>
+    <div class="card">
+      <div class="row">
+        <div class="f" style="max-width:160px"><label>Quarter</label>
+          <div class="qsel"><select id="kQ"><option value="">Q…</option><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select><input id="kY" inputmode="numeric" maxlength="4" placeholder="Year"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>Editor</th><th>Level</th><th>Self-Review</th><th>Supervisor</th><th>Official KPI</th><th></th><th></th></tr></thead>
+        <tbody id="kpiRows"></tbody>
+      </table>
+      <div id="kpiEmpty" class="empty" hidden>No KPI cases yet for this quarter.</div>
+    </div>
+  </div>
+
+  <div class="section" style="--sa:var(--peer)">
+    <div class="seyebrow">Peer Appraisal</div>
+    <h2>Rater assignments</h2>
+    <p class="lede">Pick who rates whom for a cycle, and watch each rater's status. Nothing here is visible to raters or affects anonymity.</p>
+
+    <div class="card">
+      <div class="row">
+        <div class="f" style="max-width:160px"><label>Cycle</label>
+          <div class="qsel"><select id="cQ"><option value="">Q…</option><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select><input id="cY" inputmode="numeric" maxlength="4" placeholder="Year"></div>
+        </div>
+        <div class="f"><label>Rater</label><select id="raterSel"><option value="">Select…</option></select></div>
+        <div class="f"><label>Rates</label><select id="targetSel"><option value="">Select…</option></select></div>
+        <div class="f" style="flex:0 0 auto"><button class="btn primary" id="addBtn">Add assignment</button></div>
+      </div>
+      <div id="formErr" class="err" hidden></div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>Rater</th><th>Rates</th><th>Status</th><th style="min-width:260px">Rater's link</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="emptyMsg" class="empty" hidden>No assignments yet for this cycle.</div>
+    </div>
+  </div>
+
+  <div class="section" style="--sa:var(--pip)">
+    <div class="seyebrow">PIP</div>
+    <h2>Case tracker</h2>
+    <p class="lede">Every PIP case, open or filed — live from what's actually been saved on the form. PIPs aren't tied to a quarter, so they're all listed together, newest first. Unlike KPI and Peer, there's no personal link — a PIP is run by whichever supervisor opens it. <b>Create case</b> only reserves the case here and opens the form for you to start filling in; nothing appears in ClickUp until you actually save real content.</p>
+    <div class="card">
+      <div class="row">
+        <div class="f"><label>Editor</label><select id="pipEditorSel"><option value="">Select…</option></select></div>
+        <div class="f" style="flex:0 0 auto"><button class="btn pip" id="pipTaskBtn" type="button">Create case</button></div>
+      </div>
+      <div id="pipFormErr" class="err" hidden></div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>Editor</th><th>Level</th><th>Severity</th><th>Start</th><th>Review</th><th>Status</th><th></th><th></th></tr></thead>
+        <tbody id="pipRows"></tbody>
+      </table>
+      <div id="pipEmpty" class="empty" hidden>No PIP cases yet.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+// This page isn't linked from anywhere public — the URL itself is the access control,
+// so it goes straight to the table. The Worker still checks PEER_ADMIN_KEY server-side
+// (this constant must match that secret); this is not meant to stop someone who has
+// this page's URL, only to keep the API off-limits to anyone hitting it directly.
+const KEY='Planaria-admin';
+let ROSTER=[];
+
+async function api(path,opt){
+  const sep=path.includes('?')?'&':'?';
+  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
+  if(r.status===401) throw new Error('The Worker rejected the admin key — PEER_ADMIN_KEY must be set to match this page.');
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+
+function currentCycle(){
+  const q=document.getElementById('cQ').value,y=document.getElementById('cY').value;
+  return (q&&y.length===4)?(q+' '+y):'';
+}
+function fillRoster(){
+  const roster=ROSTER.map(r=>r.name).sort();
+  const raterSel=document.getElementById('raterSel'),targetSel=document.getElementById('targetSel'),pipSel=document.getElementById('pipEditorSel');
+  raterSel.innerHTML='<option value="">Select…</option>'+roster.map(n=>`<option>${n}</option>`).join('');
+  targetSel.innerHTML='<option value="">Select…</option>'+roster.map(n=>`<option>${n}</option>`).join('');
+  pipSel.innerHTML='<option value="">Select…</option>'+roster.map(n=>`<option>${n}</option>`).join('');
+}
+async function addPipLinkTask(){
+  const name=document.getElementById('pipEditorSel').value;
+  const errEl=document.getElementById('pipFormErr');errEl.hidden=true;
+  if(!name){errEl.textContent='Pick an editor first.';errEl.hidden=false;return;}
+  const btn=document.getElementById('pipTaskBtn');btn.disabled=true;btn.textContent='Creating…';
+  try{
+    const j=await api('/pip/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:name})});
+    document.getElementById('pipEditorSel').value='';
+    await loadPipTracker();
+    // No ClickUp task exists yet (that only happens once you save real content),
+    // so this is the only way to reach the form -- open it directly. If a popup
+    // blocker eats it, the case still shows up below with its own "Open & fill" link.
+    if(j.link)window.open(j.link,'_blank','noopener');
+  }catch(e){ errEl.textContent=e.message;errEl.hidden=false; }
+  btn.disabled=false;btn.textContent='Create case';
+}
+function wireCopy(root){
+  root.querySelectorAll('.copyBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const i=b.previousElementSibling;try{await navigator.clipboard.writeText(i.value);}catch(e){i.select();document.execCommand('copy');}
+    b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy',1200);
+  }));
+}
+async function loadAllLinks(){
+  const tbody=document.getElementById('linkRows');
+  tbody.innerHTML='<tr><td colspan="2" class="empty">Loading…</td></tr>';
+  let data;
+  try{ data=await api('/peer/rater-links'); }
+  catch(e){ tbody.innerHTML=`<tr><td colspan="2" class="empty">Failed to load: ${e.message}</td></tr>`; return; }
+  const people=data.people||[];
+  if(!people.length){tbody.innerHTML='<tr><td colspan="2" class="empty">No active editors in the roster.</td></tr>';return;}
+  tbody.innerHTML=people.map(p=>`
+    <tr data-name="${p.name}">
+      <td><b>${p.name}</b></td>
+      <td><div class="linkcell" style="margin-top:0"><input readonly value="${p.kpi_link}"><button class="btn mini copyBtn" type="button">Copy</button><button class="btn mini kpi kpiTaskBtn" type="button">Add task in ClickUp</button></div></td>
+    </tr>`).join('');
+  wireCopy(tbody);
+  tbody.querySelectorAll('.kpiTaskBtn').forEach(b=>b.addEventListener('click',()=>addKpiLinkTask(b)));
+  syncKpiTaskButtons();
+}
+async function addKpiLinkTask(btn){
+  const tr=btn.closest('tr'),name=tr.dataset.name;
+  const cycle=kpiCycle();
+  if(!cycle){alert('Pick a quarter and year in the Case tracker below first — the task is scoped to that quarter.');return;}
+  btn.disabled=true;btn.textContent='Adding…';
+  try{
+    await api('/kpi/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:name,quarter:cycle})});
+    // loadKpiTracker() re-syncs every button (including this one) to "✓ Task added"
+    // and keeps it disabled -- clicking again would mint a second, orphaned case id
+    // for the same editor+quarter instead of doing anything useful.
+    await loadKpiTracker();
+  }catch(e){ btn.disabled=false;btn.textContent='Add task in ClickUp'; alert('Failed to create task: '+e.message); }
+}
+
+function kpiCycle(){const q=document.getElementById('kQ').value,y=document.getElementById('kY').value;return (q&&y.length===4)?(q+' '+y):'';}
+let KPI_CASE_ROWS=[];
+async function loadKpiTracker(){
+  const cycle=kpiCycle();
+  const tbody=document.getElementById('kpiRows'),empty=document.getElementById('kpiEmpty');
+  if(!cycle){tbody.innerHTML='';empty.hidden=false;empty.textContent='Pick a quarter and year.';KPI_CASE_ROWS=[];syncKpiTaskButtons();return;}
+  tbody.innerHTML='<tr><td colspan="7" class="empty">Loading…</td></tr>';empty.hidden=true;
+  let data;
+  try{ data=await api(`/kpi/cases?cycle=${encodeURIComponent(cycle)}`); }
+  catch(e){ tbody.innerHTML=`<tr><td colspan="7" class="empty">Failed to load: ${e.message}</td></tr>`; return; }
+  const rows=data.cases||[];
+  KPI_CASE_ROWS=rows;
+  if(!rows.length){tbody.innerHTML='';empty.hidden=false;empty.textContent='No KPI cases yet for this quarter.';syncKpiTaskButtons();return;}
+  tbody.innerHTML=rows.map(c=>`
+    <tr data-id="${c.id}">
+      <td><b>${c.editor_name}</b></td>
+      <td>${c.level||'—'}</td>
+      <td><span class="pill ${c.editor_locked?'done':'pending'}">${c.editor_locked?'✓ Locked':'Not locked'}</span></td>
+      <td><span class="pill ${c.finalized?'done':'pending'}">${c.finalized?'✓ Filed':'Awaiting'}</span></td>
+      <td>${c.official_kpi!=null?c.official_kpi:'—'}</td>
+      <td><a class="caselink" href="kpi_scorecard.html?kpi=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">Open case ↗</a></td>
+      <td><button class="btn mini kpiDelBtn" type="button">Remove</button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.kpiDelBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const tr=b.closest('tr');const id=tr.dataset.id;
+    if(!confirm(`Remove case ${id} from this tracker?\n\nThis only removes it from our system — it does not touch or delete anything in ClickUp.`))return;
+    b.disabled=true;b.textContent='Removing…';
+    try{ await api(`/kpi/cases/${encodeURIComponent(id)}`,{method:'DELETE'}); await loadKpiTracker(); }
+    catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
+  }));
+  syncKpiTaskButtons();
+}
+// Cross-references the Case tracker (just loaded) against the Personal Links table's
+// "Add task in ClickUp" buttons, so a case that already has a reminder task for the
+// selected quarter shows as done instead of staying clickable and risking a second,
+// orphaned case id (KPI-...-02) for the same editor+quarter.
+function syncKpiTaskButtons(){
+  const tasked=new Set(KPI_CASE_ROWS.filter(c=>c.reminder_task_id).map(c=>c.editor_name));
+  document.querySelectorAll('#linkRows tr[data-name]').forEach(tr=>{
+    const btn=tr.querySelector('.kpiTaskBtn');
+    if(!btn)return;
+    if(tasked.has(tr.dataset.name)){btn.disabled=true;btn.textContent='✓ Task added';}
+    else{btn.disabled=false;btn.textContent='Add task in ClickUp';}
+  });
+}
+
+async function loadPipTracker(){
+  const tbody=document.getElementById('pipRows'),empty=document.getElementById('pipEmpty');
+  tbody.innerHTML='<tr><td colspan="8" class="empty">Loading…</td></tr>';empty.hidden=true;
+  let data;
+  try{ data=await api('/pip/cases'); }
+  catch(e){ tbody.innerHTML=`<tr><td colspan="8" class="empty">Failed to load: ${e.message}</td></tr>`; return; }
+  const rows=data.cases||[];
+  if(!rows.length){tbody.innerHTML='';empty.hidden=false;empty.textContent='No PIP cases yet.';return;}
+  tbody.innerHTML=rows.map(c=>{
+    const status=c.filed?`<span class="pill ${c.verdict==='PASS'?'pass':'fail'}">${c.verdict||c.result||'Filed'}</span>`:'<span class="pill pending">Open</span>';
+    return `<tr data-id="${c.id}">
+      <td><b>${c.editor}</b></td>
+      <td>${c.level||'—'}</td>
+      <td>${c.severity||'—'}</td>
+      <td>${c.start_date||'—'}</td>
+      <td>${c.review_date||'—'}</td>
+      <td>${status}</td>
+      <td><a class="caselink" href="pip.html?pip=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">${c.filed?'View ↗':'Open & fill ↗'}</a></td>
+      <td><button class="btn mini pipDelBtn" type="button">Remove</button></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.pipDelBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const tr=b.closest('tr');const id=tr.dataset.id;
+    if(!confirm(`Remove PIP case ${id} from this tracker?\n\nThis only removes it from our system — it does not touch or delete anything in ClickUp.`))return;
+    b.disabled=true;b.textContent='Removing…';
+    try{ await api(`/pip/cases/${encodeURIComponent(id)}`,{method:'DELETE'}); await loadPipTracker(); }
+    catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
+  }));
+}
+
+let WIRED=false;
+async function boot(){
+  document.getElementById('appWrap').hidden=false;
+  try{
+    const cfg=await (await fetch(`${WORKER_URL}/config`)).json();
+    ROSTER=cfg.roster||[];
+    fillRoster();
+  }catch(e){
+    document.getElementById('bootBanner').innerHTML='<div class="err" style="margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;border-radius:10px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">'+
+      '<span>Couldn’t reach the server — it may be waking up (first load can take ~10s). ('+e.message+')</span>'+
+      '<button class="btn primary mini" id="bootRetry" type="button">Retry</button></div>';
+    document.getElementById('bootRetry').onclick=boot;
+    return;
+  }
+  document.getElementById('bootBanner').innerHTML='';
+  if(!WIRED){
+    WIRED=true;
+    document.getElementById('cQ').addEventListener('change',loadRows);
+    document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadRows();});
+    document.getElementById('addBtn').addEventListener('click',addAssignment);
+    document.getElementById('pipTaskBtn').addEventListener('click',addPipLinkTask);
+    document.getElementById('kQ').addEventListener('change',loadKpiTracker);
+    document.getElementById('kY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadKpiTracker();});
+    const n=new Date();const q='Q'+(Math.floor(n.getMonth()/3)+1),y=String(n.getFullYear());
+    document.getElementById('cQ').value=q;document.getElementById('cY').value=y;
+    document.getElementById('kQ').value=q;document.getElementById('kY').value=y;
+  }
+  await Promise.all([loadAllLinks(),loadRows(),loadKpiTracker(),loadPipTracker()]);
+}
+
+async function loadRows(){
+  const cycle=currentCycle();
+  const tbody=document.getElementById('rows'),empty=document.getElementById('emptyMsg');
+  if(!cycle){tbody.innerHTML='';empty.hidden=false;empty.textContent='Pick a quarter and year.';return;}
+  tbody.innerHTML='<tr><td colspan="5" class="empty">Loading…</td></tr>';empty.hidden=true;
+  let data;
+  try{ data=await api(`/peer/assignments?cycle=${encodeURIComponent(cycle)}`); }
+  catch(e){ tbody.innerHTML=`<tr><td colspan="5" class="empty">Failed to load: ${e.message}</td></tr>`; return; }
+  const rows=data.assignments||[];
+  if(!rows.length){tbody.innerHTML='';empty.hidden=false;empty.textContent='No assignments yet for this cycle.';return;}
+  tbody.innerHTML=rows.map(a=>`
+    <tr data-id="${a.id}" data-rater="${a.rater_name}">
+      <td><b>${a.rater_name}</b></td>
+      <td>${a.target_name}</td>
+      <td><span class="status ${a.completed?'done':'pending'}">${a.completed?'✓ Submitted':'Pending'}</span></td>
+      <td>${a.rater_link?`<div class="linkcell"><input readonly value="${a.rater_link}"><button class="btn mini copyBtn" type="button">Copy</button><button class="btn mini peerTaskBtn" type="button" ${a.has_task?'disabled':''}>${a.has_task?'✓ Task added':'Add task'}</button></div>`:'<span class="empty">—</span>'}</td>
+      <td><button class="btn mini delBtn" type="button">Remove</button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.copyBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const i=b.previousElementSibling;try{await navigator.clipboard.writeText(i.value);}catch(e){i.select();document.execCommand('copy');}
+    b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy',1200);
+  }));
+  tbody.querySelectorAll('.peerTaskBtn').forEach(b=>b.addEventListener('click',()=>addPeerLinkTask(b)));
+  tbody.querySelectorAll('.delBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const tr=b.closest('tr');const id=tr.dataset.id;
+    if(!confirm('Remove this assignment?'))return;
+    try{ await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'}); tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';} }
+    catch(e){ alert('Failed to remove: '+e.message); }
+  }));
+}
+async function addPeerLinkTask(btn){
+  const tr=btn.closest('tr'),rater=tr.dataset.rater,cycle=currentCycle();
+  btn.disabled=true;btn.textContent='Adding…';
+  try{
+    await api('/peer/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rater_name:rater,cycle})});
+    // One task per rater per cycle -- reload so every row for this rater (they may
+    // rate several people) reflects the same done state, not just this one button.
+    await loadRows();
+  }catch(e){ btn.disabled=false;btn.textContent='Add task'; alert('Failed to create task: '+e.message); }
+}
+
+async function addAssignment(){
+  const cycle=currentCycle(),rater=document.getElementById('raterSel').value,target=document.getElementById('targetSel').value;
+  const errEl=document.getElementById('formErr');errEl.hidden=true;
+  if(!cycle){errEl.textContent='Pick a quarter and year first.';errEl.hidden=false;return;}
+  if(!rater||!target){errEl.textContent='Pick both a rater and who they rate.';errEl.hidden=false;return;}
+  if(rater===target){errEl.textContent="A person can't rate themselves.";errEl.hidden=false;return;}
+  const btn=document.getElementById('addBtn');btn.disabled=true;btn.textContent='Adding…';
+  try{
+    await api('/peer/assignments',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cycle,rater_name:rater,target_name:target})});
+    document.getElementById('targetSel').value='';
+    await loadRows();
+  }catch(e){ errEl.textContent=e.message;errEl.hidden=false; }
+  btn.disabled=false;btn.textContent='Add assignment';
+}
+
+boot();
+</script>
+</body>
+</html>
