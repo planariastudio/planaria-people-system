@@ -239,7 +239,13 @@ function fillTargets(list,note){
   else {tgt.value='';state.target='';state.target_id='';state.level='';document.getElementById('tlvl').innerHTML='';}
   validate();
 }
-function rosterAll(){return ROSTER.map(function(r){return{name:r[0],level:r[1],slug:r[2],done:false};});}
+// The server already rejects a self-rating (400), but the dropdown shouldn't
+// offer it in the first place -- MY_NAME is resolved via /whoami (same call
+// kpi_scorecard.html already makes for this same token) and filtered out here,
+// which covers every path that falls back to the full roster: the initial paint
+// before assignments load, "no one assigned yet", and the worker-down fallback.
+let MY_NAME=null;
+function rosterAll(){return ROSTER.filter(function(r){return r[0]!==MY_NAME;}).map(function(r){return{name:r[0],level:r[1],slug:r[2],done:false};});}
 function loadAssignments(){
   if(!RATER_TOKEN||!state.cycle){return Promise.resolve();}
   var cyc=state.cycle;
@@ -406,8 +412,15 @@ function bootBanner(msg){
   b.innerHTML='<span>'+msg+'</span><button type="button" id="bootRetry" style="border:0;background:#b45309;color:#fff;padding:7px 14px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer">Retry</button>';
   document.getElementById('bootRetry').onclick=function(){b.remove();boot();};
 }
+function fetchMyName(){
+  if(!RATER_TOKEN)return Promise.resolve();
+  return fetch(WORKER_URL+'/whoami?t='+encodeURIComponent(RATER_TOKEN))
+    .then(function(r){return r.json();})
+    .then(function(j){ if(j&&j.found)MY_NAME=j.name; })
+    .catch(function(){});
+}
 function boot(){
-  return loadConfig().then(function(){
+  return Promise.all([loadConfig(),fetchMyName()]).then(function(){
     if(!RATER_TOKEN){
       document.body.innerHTML='<div style="padding:60px 40px;font-family:sans-serif;max-width:560px;margin:0 auto;text-align:center">'+
         '<h2 style="color:#0d9488">Personal link required</h2>'+
