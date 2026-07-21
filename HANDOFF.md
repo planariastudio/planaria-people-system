@@ -48,7 +48,7 @@ Space (`CLICKUP_SPACE_ID`) → **one folder per person** → four lists:
 
 | List | Contains |
 |---|---|
-| **To-do** | Prompts — things this person must fill in: their Peer "rate your peers" task (lives here), and a mirror of their pending KPI self-review task |
+| **To-do** | Prompts — everything this person must fill in. Both their Peer "rate your peers" task **and** their pending KPI self-review task are *created here* (this is their home list, not a mirror), so To-do is a complete "what I owe" view with no ClickApp dependency |
 | **KPI** | One task per quarter that **evolves in place**: created as `KPI self-review · Name · Q3 2026` (with personal link, assigned to them) → renamed `… · Awaiting supervisor` when they lock → renamed `KPI · Name · Q3 2026 · Filed ✓` with the result PDF attached and focus areas as subtasks when the supervisor files. Never two tasks per quarter. |
 | **Peer** | Scorecards **about** this person: `Peer Scorecard · Name · cycle` task, updated in place as raters submit, PDF snapshots attached (max 2: when the pool opens at 2 raters, and a `_final` one when all assigned raters are in) |
 | **PIP** | PIP case task — created only on the **first real save** of case data (not when the case is reserved), support actions as subtasks with "by when" due dates, PDF at first save and at checkpoint/filing only |
@@ -57,7 +57,9 @@ Conventions:
 - **Status is carried in the task name suffix** (`· Awaiting supervisor`, `· Filed ✓`, `· 1 of 2 done`, `· All done ✓`) — NOT ClickUp status fields (workspace status names were unknown, so name-suffix was chosen deliberately).
 - **Tags:** exactly two per task — the instrument (`KPI` / `Peer Appraisal` / `PIP`) and the quarter (`Q3-2026` format).
 - Assignee is auto-resolved by matching ClickUp username/email-prefix to roster name (known gap: silently unassigned on mismatch — see §9).
-- The KPI To-do mirroring uses ClickUp's "Tasks in Multiple Lists" ClickApp; if it's not enabled on the workspace, the calls no-op and the KPI task simply lives only in the KPI list.
+- Moving the KPI task from To-do → KPI at filing uses ClickUp's "Tasks in Multiple Lists" ClickApp. If it's not enabled, the task safely **stays in To-do** marked `Filed ✓`/Complete — it is never removed from To-do unless the add to KPI succeeded first, so it can't end up in no list at all.
+- **Removing a case cascades:** the Remove buttons in `links_admin.html` delete the Supabase row *and* the ClickUp task (ClickUp deletes are restorable from workspace trash for ~30 days). Removing a single peer *assignment* does not delete the rater's prompt task — it just refreshes that task's target list.
+- Statuses are set best-effort against the list the task actually lives in, matched case-insensitively; unmatched = silent no-op, with the task-name suffix as the always-present fallback.
 - ClickUp's API cannot replace/delete attachments, which is why PDFs attach only at meaningful snapshots, with comments in between.
 
 ## 5. Flows, step by step (source material for the guidebooks)
@@ -114,7 +116,7 @@ Rubrics/roster live in the Google Sheet (13 tabs; `Planaria_People_System_MASTER
 2. **Peer ratings aren't restricted to assignments server-side** — the form guides raters to assigned targets, but the API accepts a rating for anyone (except self). Deliberate so far.
 3. **Status = task-name suffix**, not real ClickUp statuses. Native ClickUp automations (e.g. "DM assignee when filed") trigger better off real statuses — if DM automations are wanted (they are, per Joshua), consider migrating to a status field then.
 4. **Duplicate legacy tasks in ClickUp** — before the button-persistence fix, "Add task" could be clicked twice; e.g. Davin Edbert has two identical Peer Appraisal tasks. `peer_reminder` points at the newer one; older ones must be deleted by hand in ClickUp.
-5. **KPI To-do mirroring needs the "Tasks in Multiple Lists" ClickApp**; without it, KPI tasks appear only in the KPI list (harmless).
+5. **Moving the filed KPI task out of To-do needs the "Tasks in Multiple Lists" ClickApp**; without it, filed KPI tasks stay in To-do (marked `Filed ✓` + Complete) instead of moving to the KPI list. Functional either way, just less tidy.
 6. **MIN_N = 2** raters before any pooled peer data is visible (confidentiality floor).
 7. Supervisor password (`Planaria-admin`) and admin key are client-side constants by design — the URLs are unlisted; the Worker enforces the real gate.
 8. `generate_rater_tokens.py` backfills tokens manually; `/peer/rater-links` also auto-generates missing tokens on load.
