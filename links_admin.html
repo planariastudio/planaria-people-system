@@ -216,19 +216,36 @@ async function addPipLinkTask(){
   }catch(e){ errEl.textContent=e.message;errEl.hidden=false; }
   btn.disabled=false;btn.textContent='Create case';
 }
+// One Worker request per editor, run sequentially (not Promise.all) -- each
+// editor's setup can take 8-10 ClickUp/Supabase calls, and a single Worker
+// invocation has a hard cap on total subrequests. Looping the whole roster in
+// one request blew past that cap partway through, so each editor gets its own
+// invocation (and fresh subrequest budget) here instead.
 async function runProvisionAll(){
   const btn=document.getElementById('provisionBtn'),out=document.getElementById('provisionOut'),sum=document.getElementById('provisionSummary');
-  btn.disabled=true;btn.textContent='Setting up…';out.innerHTML='';sum.textContent='';
-  try{
-    const j=await api('/clickup/provision-all',{method:'POST'});
-    const pill=ok=>ok?'<span class="pill done">✓ ready</span>':'<span class="pill fail">✕ failed</span>';
-    out.innerHTML='<table><thead><tr><th>Editor</th><th style="width:110px">Result</th><th>Detail</th></tr></thead><tbody>'+
-      j.results.map(r=>`<tr><td><b>${r.name}</b></td><td>${pill(r.ok)}</td><td style="color:var(--muted)">${r.error||''}</td></tr>`).join('')+
-      '</tbody></table>';
-    sum.innerHTML=j.ok
-      ? `<b style="color:var(--hi)">All set.</b> ${j.total} editor(s) have a folder + lists in ClickUp.`
-      : `<b style="color:var(--lo)">${j.failed} of ${j.total} failed.</b> See detail column.`;
-  }catch(e){ out.innerHTML=`<div class="err">Couldn't provision ClickUp: ${e.message}</div>`; }
+  btn.disabled=true;out.innerHTML='';sum.textContent='';
+  const pill=ok=>ok===null?'<span class="pill pending">…</span>':ok?'<span class="pill done">✓ ready</span>':'<span class="pill fail">✕ failed</span>';
+  const people=ROSTER.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  out.innerHTML='<table><thead><tr><th>Editor</th><th style="width:110px">Result</th><th>Detail</th></tr></thead><tbody>'+
+    people.map(p=>`<tr id="prow-${p.id}"><td><b>${p.name}</b></td><td class="pcell">${pill(null)}</td><td class="dcell" style="color:var(--muted)"></td></tr>`).join('')+
+    '</tbody></table>';
+  let done=0,failed=0;
+  for(const p of people){
+    btn.textContent=`Setting up… (${done+1}/${people.length})`;
+    const row=document.getElementById(`prow-${p.id}`);
+    try{
+      await api('/clickup/provision-one',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_id:p.id,editor_name:p.name})});
+      row.querySelector('.pcell').innerHTML=pill(true);
+    }catch(e){
+      failed++;
+      row.querySelector('.pcell').innerHTML=pill(false);
+      row.querySelector('.dcell').textContent=e.message;
+    }
+    done++;
+  }
+  sum.innerHTML=failed===0
+    ? `<b style="color:var(--hi)">All set.</b> ${done} editor(s) have a folder + lists in ClickUp.`
+    : `<b style="color:var(--lo)">${failed} of ${done} failed.</b> See detail column.`;
   btn.disabled=false;btn.textContent='Create ClickUp folders for all editors';
 }
 // Small non-blocking confirmation of where a ClickUp task actually landed.
