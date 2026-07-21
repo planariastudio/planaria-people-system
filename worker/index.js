@@ -19995,12 +19995,18 @@ async function clickupAttachPdf(env, taskId, filename, pdfBytes) {
   return res.json();
 }
 __name(clickupAttachPdf, "clickupAttachPdf");
+// Comments are advisory (progress notes), so a failure must never fail the save
+// that triggered it -- but it also shouldn't throw an unhandled rejection out of
+// a handler, which an un-awaited/unchecked fetch rejection could do.
 async function clickupComment(env, taskId, text) {
-  await fetch(`https://api.clickup.com/api/v2/task/${taskId}/comment`, {
-    method: "POST",
-    headers: { Authorization: env.CLICKUP_TOKEN, "Content-Type": "application/json" },
-    body: JSON.stringify({ comment_text: text })
-  });
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/task/${taskId}/comment`, {
+      method: "POST",
+      headers: { Authorization: env.CLICKUP_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ comment_text: text })
+    });
+    return res.ok;
+  } catch (e) { return false; }
 }
 __name(clickupComment, "clickupComment");
 async function clickupCreateFolder(env, name) {
@@ -20061,24 +20067,37 @@ async function clickupCreateList(env, folderId, name) {
 __name(clickupCreateList, "clickupCreateList");
 // Mirror a task into a second list / remove that mirror. Both need the
 // "Tasks in Multiple Lists" ClickApp enabled on the workspace; when it's off,
-// ClickUp rejects the call and we deliberately swallow it -- the task simply
-// stays only in its home list, which is the pre-mirroring behaviour.
+// ClickUp rejects the call and the task simply stays in its home list.
+// These RETURN whether it worked (they used to only catch network exceptions,
+// so a 4xx "ClickApp disabled" resolved fine and vanished silently -- there was
+// no way to tell mirroring was off). Callers surface this instead of guessing.
 async function clickupAddTaskToList(env, listId, taskId) {
   try {
-    await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
+    const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
       method: "POST", headers: { Authorization: env.CLICKUP_TOKEN }
     });
-  } catch (e) {}
+    return res.ok;
+  } catch (e) { return false; }
 }
 __name(clickupAddTaskToList, "clickupAddTaskToList");
 async function clickupRemoveTaskFromList(env, listId, taskId) {
   try {
-    await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
+    const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
       method: "DELETE", headers: { Authorization: env.CLICKUP_TOKEN }
     });
-  } catch (e) {}
+    return res.ok;
+  } catch (e) { return false; }
 }
 __name(clickupRemoveTaskFromList, "clickupRemoveTaskFromList");
+async function clickupDeleteTask(env, taskId) {
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/task/${taskId}`, {
+      method: "DELETE", headers: { Authorization: env.CLICKUP_TOKEN }
+    });
+    return res.ok;
+  } catch (e) { return false; }
+}
+__name(clickupDeleteTask, "clickupDeleteTask");
 async function clickupCreateTaskInList(env, listId, name, opts = {}) {
   const payload = { name };
   if (opts.markdown_description) payload.markdown_description = opts.markdown_description;
@@ -20110,6 +20129,33 @@ async function clickupUpdateTask(env, taskId, fields) {
   } catch (e) { return null; }
 }
 __name(clickupUpdateTask, "clickupUpdateTask");
+async function clickupListStatuses(env, listId) {
+  try {
+    const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}`, { headers: { Authorization: env.CLICKUP_TOKEN } });
+    if (!res.ok) return [];
+    const j = await res.json();
+    return (j.statuses || []).map((s) => s.status);
+  } catch (e) { return []; }
+}
+__name(clickupListStatuses, "clickupListStatuses");
+// Best-effort real-status transition, layered ON TOP OF the existing task-name
+// suffix convention (kept as-is, everywhere) rather than replacing it. We don't
+// know each workspace list's exact configured status names up front -- they're
+// looked up per call and matched case-insensitively by substring ("in progress"
+// matches "In Progress", "IN PROGRESS", etc). If the list has no matching status
+// (workspace uses a custom flow, or the call fails), this silently no-ops and the
+// name suffix remains the reliable fallback that already communicates state.
+async function clickupSetStatus(env, taskId, listId, desiredSubstring) {
+  try {
+    const statuses = await clickupListStatuses(env, listId);
+    const norm = (s) => String(s || "").trim().toLowerCase();
+    const hit = statuses.find((s) => norm(s).includes(norm(desiredSubstring)));
+    if (!hit) return false;
+    await clickupUpdateTask(env, taskId, { status: hit });
+    return true;
+  } catch (e) { return false; }
+}
+__name(clickupSetStatus, "clickupSetStatus");
 function quarterRange(q) {
   const m = /^Q([1-4])\s+(\d{4})$/.exec(String(q || "").trim().toUpperCase());
   if (!m) return null;
@@ -20702,6 +20748,13 @@ async function handleKpiEditor(env, body) {
   const reminderTaskId = existing.length && existing[0].reminder_task_id;
   if (reminderTaskId) {
     await clickupUpdateTask(env, reminderTaskId, { name: `KPI self-review \xB7 ${body.editor} \xB7 ${body.quarter} \xB7 Awaiting supervisor` });
+    try {
+      // The pending self-review task lives in the To-do list (see
+      // handleCreateKpiLinkTask) -- look statuses up from the list it's actually
+      // in, since a list can override the space's status set.
+      const statusListId = await resolveEditorList(env, slug, body.editor, "todo") || await resolveEditorList(env, slug, body.editor, "kpi");
+      if (statusListId) await clickupSetStatus(env, reminderTaskId, statusListId, "in progress");
+    } catch (e) {}
   }
   return json({ ok: true, id: body.id });
 }
@@ -20775,11 +20828,22 @@ async function handleKpiFinalize(env, body) {
     });
   }
   await clickupAttachPdf(env, task.id, `KPI_Result_${kpiCase.editor_name.replace(/\s+/g, "_")}_${kpiCase.quarter}.pdf`, pdf);
-  // Filed = no longer pending, so drop the To-do mirror added at link-task creation;
-  // the task lives on in the KPI list as the quarter's record. (No-op when the
-  // Tasks in Multiple Lists ClickApp is off or the mirror was never added.)
+  // Filed = no longer something the person has to do, so move it out of their
+  // To-do list and into the KPI list where the quarter's record belongs. Needs
+  // the Tasks-in-Multiple-Lists ClickApp; if that's off, `added` is false and we
+  // deliberately DON'T remove it from To-do -- removing without a successful add
+  // would strand the task in no list at all. Worst case it stays in To-do marked
+  // "Filed ✓" and Complete, which is still correct, just less tidy.
   const todoListId = await resolveEditorList(env, kpiCase.editor_id, kpiCase.editor_name, "todo");
-  if (todoListId) await clickupRemoveTaskFromList(env, todoListId, task.id);
+  let homeListId = todoListId || listId;
+  if (todoListId && listId && todoListId !== listId) {
+    const added = await clickupAddTaskToList(env, listId, task.id);
+    if (added) {
+      await clickupRemoveTaskFromList(env, todoListId, task.id);
+      homeListId = listId;
+    }
+  }
+  try { await clickupSetStatus(env, task.id, homeListId, "complete"); } catch (e) {}
   for (const f of (payload.focus || [])) {
     if (!f || !f.area) continue;
     try {
@@ -20939,7 +21003,16 @@ async function handleCreateKpiLinkTask(env, body) {
   }
   const link = await ensureRaterLink(env, roster, body.editor_name);
   const kpiLink = link.link.replace("peer_appraisal.html?t=", "kpi_scorecard.html?e=");
-  const listId = await resolveEditorList(env, person.id, person.name, "kpi");
+  // HOME LIST = To-do, not KPI. While this is a thing the person still has to fill
+  // in, it belongs beside their Peer prompt in one "what I owe" view. It previously
+  // lived in the KPI list and was only MIRRORED into To-do, which meant that with
+  // the Tasks-in-Multiple-Lists ClickApp switched off the mirror silently failed and
+  // KPI never appeared in To-do at all. Creating it here needs no ClickApp; at filing
+  // it moves to the KPI list (handleKpiFinalize), degrading to "stays in To-do,
+  // marked Filed" if that ClickApp isn't available.
+  const kpiListId = await resolveEditorList(env, person.id, person.name, "kpi");
+  const todoListId = await resolveEditorList(env, person.id, person.name, "todo");
+  const listId = todoListId || kpiListId;
   const assigneeId = await clickupResolveUserId(env, person.name);
   const qr = quarterRange(body.quarter);
   const task = await clickupCreateTaskInList(env, listId, `KPI self-review \xB7 ${person.name} \xB7 ${body.quarter}`, {
@@ -20947,13 +21020,6 @@ async function handleCreateKpiLinkTask(env, body) {
     tags: ["KPI", qr ? qr.tag : null].filter(Boolean),
     markdown_description: `Fill in your KPI self-review for **${body.quarter}**: ${kpiLink}\n\nThis is your personal link — it only ever opens your own review, never anyone else's.`
   });
-  // The KPI task's home is the KPI list (it's the same task that later becomes the
-  // filed record -- one task per quarter). While it's still pending, mirror it into
-  // the person's To-do list so everything they owe lives in one view; the mirror is
-  // removed at filing (handleKpiFinalize). No-ops if the workspace doesn't have the
-  // Tasks in Multiple Lists ClickApp enabled.
-  const todoListId = await resolveEditorList(env, person.id, person.name, "todo");
-  if (todoListId && todoListId !== listId) await clickupAddTaskToList(env, todoListId, task.id);
   // Insert (not upsert) with re-mint-on-conflict so a concurrent create can't merge
   // onto our row; the id is minted inside the retry. The task name has no id in it,
   // so associating it with whichever id wins is safe.
@@ -20962,11 +21028,37 @@ async function handleCreateKpiLinkTask(env, body) {
     (id) => ({ id, editor_id: person.id, editor_name: person.name, level: person.level, quarter: body.quarter,
       editor_locked: false, finalized: false, reminder_task_id: task.id, updated_at: (/* @__PURE__ */ new Date()).toISOString() })
   );
-  return json({ ok: true, task_id: task.id, case_id: caseId });
+  // Report WHERE it landed so "I clicked the button but see nothing in ClickUp"
+  // is answerable from the UI instead of a guess.
+  return json({ ok: true, task_id: task.id, case_id: caseId, list_name: listId === todoListId ? "To-do" : "KPI", task_url: task.url || null });
 }
 __name(handleCreateKpiLinkTask, "handleCreateKpiLinkTask");
 // Same idea for Peer Appraisal, but scoped per rater per cycle (one link covers
 // everyone they're assigned to rate that cycle, not one link per pairing).
+function peerPromptMd(link, cycle, targets) {
+  const targetList = targets.length ? targets.map((t) => `- ${t}`).join("\n") : "_No assignments yet for this cycle — add them in the assignments tracker first._";
+  return `Rate your assigned peers for **${cycle}** using your personal link: ${link}\n\n**Assigned to rate:**\n${targetList}`;
+}
+__name(peerPromptMd, "peerPromptMd");
+// Keeps a rater's To-do prompt task's "Assigned to rate" list current after the
+// admin adds or removes an assignment post-creation. Without this, the task's
+// description was frozen at whatever the roster looked like the moment "Add
+// task" was clicked -- a name added later simply never showed up for the rater.
+// No-op if this rater+cycle has no task yet (nothing to sync); best-effort, a
+// ClickUp hiccup here must not fail the assignment write that triggered it.
+async function syncPeerPromptTask(env, cycle, raterName) {
+  try {
+    const reminderRows = await sbSelect(env, "peer_reminder", `?cycle=eq.${encodeURIComponent(cycle)}&rater_name=eq.${encodeURIComponent(raterName)}&select=task_id`);
+    const taskId = reminderRows.length && reminderRows[0].task_id;
+    if (!taskId) return;
+    const roster = await sbSelect(env, "roster", `?select=id,name,peer_token`);
+    const link = await ensureRaterLink(env, roster, raterName);
+    if (!link) return;
+    const assignments = await sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(cycle)}&rater_name=eq.${encodeURIComponent(raterName)}&select=target_name`);
+    await clickupUpdateTask(env, taskId, { markdown_description: peerPromptMd(link.link, cycle, assignments.map((a) => a.target_name)) });
+  } catch (e) {}
+}
+__name(syncPeerPromptTask, "syncPeerPromptTask");
 async function handleCreatePeerLinkTask(env, body) {
   if (!checkAdminKey(env, body.key)) return err("Unauthorized", 401);
   if (!body.rater_name || !body.cycle) return err("missing rater_name/cycle");
@@ -20978,17 +21070,19 @@ async function handleCreatePeerLinkTask(env, body) {
   const targets = assignments.map((a) => a.target_name);
   // The rater's *prompt* goes in their To-do list; their Peer list is reserved for
   // scorecards ABOUT them, so prompts and results never mix in one view.
-  const listId = await resolveEditorList(env, rater.id, rater.name, "todo") || await resolveEditorList(env, rater.id, rater.name, "peer");
+  const todoListId = await resolveEditorList(env, rater.id, rater.name, "todo");
+  const listId = todoListId || await resolveEditorList(env, rater.id, rater.name, "peer");
   const assigneeId = await clickupResolveUserId(env, rater.name);
   const qr = quarterRange(body.cycle);
-  const targetList = targets.length ? targets.map((t) => `- ${t}`).join("\n") : "_No assignments yet for this cycle — add them in the assignments tracker first._";
   const task = await clickupCreateTaskInList(env, listId, `Peer Appraisal \xB7 ${rater.name} \xB7 ${body.cycle}`, {
     assignees: assigneeId ? [assigneeId] : null,
     tags: ["Peer Appraisal", qr ? qr.tag : null].filter(Boolean),
-    markdown_description: `Rate your assigned peers for **${body.cycle}** using your personal link: ${link.link}\n\n**Assigned to rate:**\n${targetList}`
+    markdown_description: peerPromptMd(link.link, body.cycle, targets)
   });
   await sbUpsert(env, "peer_reminder", { cycle: body.cycle, rater_name: body.rater_name, task_id: task.id, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, "cycle,rater_name");
-  return json({ ok: true, task_id: task.id });
+  // Which folder+list it actually landed in -- surfaced in the admin UI so a
+  // "nothing appeared in ClickUp" report is answerable without guesswork.
+  return json({ ok: true, task_id: task.id, folder_name: rater.name, list_name: todoListId ? "To-do" : "Peer", task_url: task.url || null });
 }
 __name(handleCreatePeerLinkTask, "handleCreatePeerLinkTask");
 // Reserves a case id only -- no ClickUp task yet. PIP has no equivalent to the
@@ -21053,6 +21147,7 @@ async function handleCreateAssignment(env, body) {
       cycle: body.cycle, rater_name: body.rater_name, rater_id: body.rater_id || null,
       target_name: body.target_name, target_id: body.target_id || null
     });
+    await syncPeerPromptTask(env, body.cycle, body.rater_name);
     return json({ ok: true, id: row[0] && row[0].id });
   } catch (e) {
     if (String(e.message).includes("23505")) return err(`${body.rater_name} is already assigned to rate ${body.target_name} in ${body.cycle}.`, 409);
@@ -21062,13 +21157,113 @@ async function handleCreateAssignment(env, body) {
 __name(handleCreateAssignment, "handleCreateAssignment");
 async function handleDeleteAssignment(env, id, key) {
   if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  const rows = await sbSelect(env, "peer_assignment", `?id=eq.${encodeURIComponent(id)}&select=cycle,rater_name`);
   await sbDelete(env, "peer_assignment", `?id=eq.${encodeURIComponent(id)}`);
+  if (rows.length) await syncPeerPromptTask(env, rows[0].cycle, rows[0].rater_name);
   return json({ ok: true });
 }
 __name(handleDeleteAssignment, "handleDeleteAssignment");
 // ===== Read-only trackers for the links_admin.html portal. Unlike peer_assignment
 // (a manual planning table), these mirror the real kpi_case/pip_case rows directly --
 // there is nothing to "add", they just reflect whatever the live forms have saved. =====
+// ===== End-to-end health check =====================================
+// Read-only probe of every moving part (Supabase -> tables -> migrations ->
+// config content -> ClickUp token/space -> Sheet webhook -> secrets), so
+// "is the whole chain actually wired up?" is one click instead of a manual
+// tour of four dashboards. Creates and mutates NOTHING.
+async function handleSelfTest(env, key) {
+  if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
+  const checks = [];
+  const add = (name, status, detail) => checks.push({ name, status, detail });
+
+  // --- secrets present (names only; never echo values) ---
+  const required = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "CLICKUP_TOKEN", "PEER_ADMIN_KEY"];
+  const optional = ["CLICKUP_SPACE_ID", "CLICKUP_LIST_ID", "SHEET_WEBHOOK_URL", "CONFIG_SYNC_TOKEN", "PEER_VIEW_KEY"];
+  const missingReq = required.filter((k) => !env[k]);
+  add("Secrets · required", missingReq.length ? "fail" : "pass",
+    missingReq.length ? `Missing: ${missingReq.join(", ")}` : `All ${required.length} present`);
+  add("Secrets · optional", "info", optional.map((k) => `${k}${env[k] ? " ✓" : " —"}`).join("  "));
+
+  // --- Supabase: connection + every table the system reads/writes ---
+  const tables = ["roster", "levels", "kpi_rubric", "peer_rubric", "pip_rubric", "lists",
+    "kpi_case", "pip_case", "peer_response", "peer_assignment", "peer_reminder", "clickup_map"];
+  const badTables = [];
+  for (const t of tables) {
+    try { await sbSelect(env, t, "?select=*&limit=1"); }
+    catch (e) { badTables.push(`${t} (${String(e.message).slice(0, 60)})`); }
+  }
+  add("Supabase · tables", badTables.length ? "fail" : "pass",
+    badTables.length ? `Unreachable/missing: ${badTables.join("; ")}` : `All ${tables.length} tables readable`);
+
+  // --- the two migration-added columns (silent degradation if absent) ---
+  const colChecks = [["kpi_case", "reminder_task_id"], ["clickup_map", "todo_list_id"]];
+  const missingCols = [];
+  for (const [t, c] of colChecks) {
+    try { await sbSelect(env, t, `?select=${c}&limit=1`); }
+    catch (e) { missingCols.push(`${t}.${c}`); }
+  }
+  add("Supabase · migrations", missingCols.length ? "fail" : "pass",
+    missingCols.length ? `Missing column(s): ${missingCols.join(", ")} — run the ALTER TABLE from HANDOFF.md` : "reminder_task_id + todo_list_id present");
+
+  // --- config actually has content (an empty rubric breaks every form) ---
+  try {
+    const [roster, kpiR, peerR, pipR] = await Promise.all([
+      sbSelect(env, "roster", "?active=eq.true&select=id"),
+      sbSelect(env, "kpi_rubric", "?select=metric"),
+      sbSelect(env, "peer_rubric", "?select=value"),
+      sbSelect(env, "pip_rubric", "?select=*")
+    ]);
+    const empties = [];
+    if (!roster.length) empties.push("roster");
+    if (!kpiR.length) empties.push("kpi_rubric");
+    if (!peerR.length) empties.push("peer_rubric");
+    add("Config · content", empties.length ? "fail" : "pass",
+      empties.length ? `EMPTY: ${empties.join(", ")} — re-sync the Sheet` : `${roster.length} active people · ${kpiR.length} KPI metrics · ${peerR.length} peer values · ${pipR.length} PIP rows`);
+  } catch (e) { add("Config · content", "fail", String(e.message).slice(0, 120)); }
+
+  // --- ClickUp: token valid, space reachable, folders visible ---
+  let teamOk = false;
+  try {
+    const res = await fetch("https://api.clickup.com/api/v2/team", { headers: { Authorization: env.CLICKUP_TOKEN } });
+    if (res.ok) {
+      const j = await res.json();
+      const members = (j.teams || []).reduce((a, t) => a + ((t.members || []).length), 0);
+      teamOk = true;
+      add("ClickUp · token", "pass", `Valid · ${(j.teams || []).length} workspace(s), ${members} members visible`);
+    } else add("ClickUp · token", "fail", `HTTP ${res.status} — token rejected`);
+  } catch (e) { add("ClickUp · token", "fail", String(e.message).slice(0, 120)); }
+
+  if (teamOk && env.CLICKUP_SPACE_ID) {
+    try {
+      const res = await fetch(`https://api.clickup.com/api/v2/space/${env.CLICKUP_SPACE_ID}/folder?archived=false`, { headers: { Authorization: env.CLICKUP_TOKEN } });
+      if (res.ok) {
+        const j = await res.json();
+        const folders = j.folders || [];
+        const withTodo = folders.filter((f) => (f.lists || []).some((l) => String(l.name).trim().toLowerCase() === "to-do")).length;
+        add("ClickUp · space", "pass", `${folders.length} person-folder(s); ${withTodo} have a To-do list`);
+        // Statuses come from the space/list and are what clickupSetStatus matches against.
+        const sample = folders.find((f) => (f.lists || []).length);
+        if (sample) {
+          const l = sample.lists[0];
+          const st = (l.statuses || []).map((s) => s.status);
+          add("ClickUp · statuses", st.length ? "pass" : "warn",
+            st.length ? `e.g. "${sample.name} › ${l.name}": ${st.join(", ")}` : "No statuses returned — status transitions will silently no-op (task-name suffix still works)");
+        }
+      } else add("ClickUp · space", "fail", `HTTP ${res.status} — CLICKUP_SPACE_ID wrong or no access`);
+    } catch (e) { add("ClickUp · space", "fail", String(e.message).slice(0, 120)); }
+  } else if (teamOk) {
+    add("ClickUp · space", "warn", "CLICKUP_SPACE_ID not set — falling back to the flat CLICKUP_LIST_ID, no per-person folders");
+  }
+
+  // --- Sheet webhook (config only; we don't POST test rows into your sheet) ---
+  add("Sheet · webhook", env.SHEET_WEBHOOK_URL ? "pass" : "warn",
+    env.SHEET_WEBHOOK_URL ? "SHEET_WEBHOOK_URL configured (raw-row mirroring on)" : "Not set — form submissions won't mirror into the *_Raw tabs");
+
+  const failed = checks.filter((c) => c.status === "fail").length;
+  const warned = checks.filter((c) => c.status === "warn").length;
+  return json({ ok: failed === 0, failed, warned, checks, checked_at: (/* @__PURE__ */ new Date()).toISOString() });
+}
+__name(handleSelfTest, "handleSelfTest");
 async function handleKpiCases(env, cycle, key) {
   if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
   if (!cycle) return err("missing cycle");
@@ -21076,24 +21271,34 @@ async function handleKpiCases(env, cycle, key) {
   return json({ cases: rows });
 }
 __name(handleKpiCases, "handleKpiCases");
-// Removes a case from our tracker only -- deliberately does not touch the ClickUp
-// task, since deleting a third-party record as a side effect of a "remove test
-// row" click would be a surprising, hard-to-reverse action to take unasked.
+// Removing a case cascades: the Supabase row AND its ClickUp task go together, so
+// the two systems can't drift into "tracker says gone, ClickUp still shows it".
+// ClickUp deletes land in the workspace trash (restorable for ~30 days), which is
+// what makes cascading acceptable for a button whose whole purpose is undoing a
+// mis-entry. Supabase is deleted only after the ClickUp call resolves, and the
+// ClickUp result is reported back so the UI can say what actually happened.
 async function handleDeleteKpiCase(env, id, key) {
   if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
   if (!id) return err("missing id");
+  const rows = await sbSelect(env, "kpi_case", `?id=eq.${encodeURIComponent(id)}&select=reminder_task_id,clickup_task_id`);
+  const taskId = rows.length ? (rows[0].reminder_task_id || rows[0].clickup_task_id) : null;
+  const clickup_deleted = taskId ? await clickupDeleteTask(env, taskId) : false;
   await sbDelete(env, "kpi_case", `?id=eq.${encodeURIComponent(id)}`);
-  return json({ ok: true });
+  return json({ ok: true, had_task: !!taskId, clickup_deleted });
 }
 __name(handleDeleteKpiCase, "handleDeleteKpiCase");
-// Same policy as handleDeleteKpiCase: removes the row from our tracker only and
-// never touches the ClickUp task -- deleting third-party records as a side effect
-// of a "remove wrong input" click is not a decision this button should make.
+// Same cascade for PIP. Its task id lives in detail._clickup_task_id (a PIP that
+// was only ever "reserved" and never filled in has no task at all -- see
+// handleCreatePipLinkTask -- in which case there's simply nothing to delete).
 async function handleDeletePipCase(env, id, key) {
   if (!checkAdminKey(env, key)) return err("Unauthorized", 401);
   if (!id) return err("missing id");
+  const rows = await sbSelect(env, "pip_case", `?id=eq.${encodeURIComponent(id)}&select=detail`);
+  const detail = rows.length ? rows[0].detail : null;
+  const taskId = detail && detail._clickup_task_id;
+  const clickup_deleted = taskId ? await clickupDeleteTask(env, taskId) : false;
   await sbDelete(env, "pip_case", `?id=eq.${encodeURIComponent(id)}`);
-  return json({ ok: true });
+  return json({ ok: true, had_task: !!taskId, clickup_deleted });
 }
 __name(handleDeletePipCase, "handleDeletePipCase");
 async function handlePipCases(env, key) {
@@ -21147,6 +21352,8 @@ async function handleSubmitPeer(env, body) {
       await clickupUpdateTask(env, reminderRows[0].task_id, {
         name: `Peer Appraisal \xB7 ${raterRows[0].name} \xB7 ${body.cycle} \xB7 ${allDone ? "All done ✓" : `${done} of ${total} done`}`
       });
+      const raterTodoListId = await resolveEditorList(env, raterRows[0].id, raterRows[0].name, "todo");
+      if (raterTodoListId) await clickupSetStatus(env, reminderRows[0].task_id, raterTodoListId, allDone ? "complete" : "in progress");
     }
   } catch (e) {}
   const PEER_VALUE_ORDER = ["Growth Potential", "Agility", "Continuous Improvement", "Teamwork", "Knowledge Sharing", "Conflict Resolution", "Communication & Handoff", "Visibility", "Deep Dive", "Accountability", "Reliability & Deadlines", "Fill-the-Gap Attitude", "Quality of Work", "Integrity", "Earn Trust"];
@@ -21192,16 +21399,29 @@ async function handleSubmitPeer(env, body) {
   // changes meaning: the first time the pool clears MIN_N, and again once every assigned
   // rater is in (the complete picture). Intermediate submissions only refresh the task
   // body -- which peerTaskMd already renders from the live pool -- and leave a note.
-  // Guarded by a flag rather than the rater count alone: nothing stops an unassigned
-  // rater from submitting, so `n >= assigned.length` can stay true for several more
-  // submissions and would re-attach every time. The flag makes the final PDF fire once.
-  let allRatersIn = false;
+  // Guarded by the assigned-pool SIZE the final snapshot was fired for, not a plain
+  // boolean -- a plain flag froze the "final" PDF forever at whatever the pool
+  // looked like the first time it completed. If an admin assigns a new rater after
+  // that (see #14), the pool grows, `n >= assigned.length` goes false again, and
+  // once the newly-expanded pool completes a fresh final snapshot correctly fires
+  // -- because the stored pool size no longer matches the current one.
+  let allRatersIn = false, assignedCount = 0;
   try {
     const assigned = await sbSelect(env, "peer_assignment", `?cycle=eq.${encodeURIComponent(body.cycle)}&target_name=eq.${encodeURIComponent(body.target)}&select=rater_name`);
-    allRatersIn = assigned.length > 0 && n >= assigned.length;
+    assignedCount = assigned.length;
+    allRatersIn = assignedCount > 0 && n >= assignedCount;
   } catch (e) {}
-  const finalAlreadyFiled = priorRows.some((r) => r.detail && r.detail._final_pdf);
-  const attachFinal = allRatersIn && !finalAlreadyFiled;
+  // Self-correcting, tied to the same allRatersIn used for the final-PDF decision
+  // above: if the pool later grows past a completed state, this naturally reverts
+  // to "in progress" until the newly-expanded pool completes again.
+  try { await clickupSetStatus(env, peerTaskId, peerList, allRatersIn ? "complete" : "in progress"); } catch (e) {}
+  // Max, not first-match: priorRows has no guaranteed order (no ORDER BY on the
+  // query), and after the pool has grown and re-completed more than once there
+  // can be several rows carrying the flag -- an unordered .find() could latch
+  // onto an old, smaller stored count forever and refire on every submission.
+  const priorFinalCounts = priorRows.filter((r) => r.detail && r.detail._final_pdf).map((r) => r.detail._final_pdf_for_assigned);
+  const finalAlreadyFiledForThisPoolSize = priorFinalCounts.length > 0 && Math.max(...priorFinalCounts) === assignedCount;
+  const attachFinal = allRatersIn && !finalAlreadyFiledForThisPoolSize;
   if (isFirstScorecard || attachFinal) {
     const pdf = await renderPdf(env, peerScorecardHtml(agg));
     await clickupAttachPdf(env, peerTaskId, `Peer_Scorecard_${body.target.replace(/\s+/g, "_")}_${body.cycle}${attachFinal ? "_final" : ""}.pdf`, pdf);
@@ -21209,7 +21429,7 @@ async function handleSubmitPeer(env, body) {
       try {
         await sbPatch(env, "peer_response",
           `?rater=eq.${encodeURIComponent(body._token)}&cycle=eq.${encodeURIComponent(body.cycle)}&detail->>target=eq.${encodeURIComponent(body.target)}`,
-          { detail: { ...body, _clickup_task_id: peerTaskId, _final_pdf: true } });
+          { detail: { ...body, _clickup_task_id: peerTaskId, _final_pdf: true, _final_pdf_for_assigned: assignedCount } });
       } catch (e) {}
     }
   } else {
@@ -21253,6 +21473,25 @@ async function handlePipOpen(env, editorName) {
   return json({ open: true, id: open.id });
 }
 __name(handlePipOpen, "handlePipOpen");
+// The PIP editor has no ClickUp presence by design (no personal link, no form
+// access -- see handleCreatePipLinkTask) so they must never be an assignee here;
+// being assigned a task they can't act on is exactly the "can view but can't
+// fill it in" confusion reported. Managers -- the people actually running the
+// case -- are the correct assignees.
+async function pipManagerAssigneeIds(env, managers) {
+  const ids = await Promise.all((managers || []).map((m) => clickupResolveUserId(env, m)));
+  return ids.filter(Boolean);
+}
+__name(pipManagerAssigneeIds, "pipManagerAssigneeIds");
+function pipTaskDescription(pipId, body) {
+  const link = `${PAGES_BASE}/pip.html?pip=${encodeURIComponent(pipId)}`;
+  return `**PIP ${pipId}** \xB7 ${body.editor} \xB7 ${body.severity || "—"} (${body.duration_d || "?"}d)
+Managers: ${(body.managers || []).join(", ") || "—"}
+Start ${body.start_date || "—"} \xB7 Final review ${body.review_date || "—"}
+
+Support actions are subtasks with their own due dates. Latest PDF attachment = current report. Live case: ${link}`;
+}
+__name(pipTaskDescription, "pipTaskDescription");
 async function handlePipUpdate(env, pipId, body) {
   const existing = await sbSelect(env, "pip_case", `?id=eq.${encodeURIComponent(pipId)}&select=detail`);
   const priorDetail = existing.length ? existing[0].detail : null;
@@ -21261,26 +21500,35 @@ async function handlePipUpdate(env, pipId, body) {
   const pdf = await renderPdf(env, pipReportHtml(body));
   const pipSlug = await editorSlug(env, body.editor);
   const pipList = await resolveEditorList(env, pipSlug, body.editor, "pip");
-  const pipAssignee = await clickupResolveUserId(env, body.editor);
+  const managerIds = await pipManagerAssigneeIds(env, body.managers);
+  const pq = quarterRange(quarterFromPipId(pipId));
+  const sevPrio = { 90: 1, 60: 2, 30: 3 }[+body.duration_d] || 2;
+  const taskFields = {
+    start_date: body.start_date ? Date.parse(body.start_date) : null,
+    due_date: body.review_date ? Date.parse(body.review_date) : null,
+    priority: sevPrio,
+    markdown_description: pipTaskDescription(pipId, body)
+  };
+  const liveLink = `${PAGES_BASE}/pip.html?pip=${encodeURIComponent(pipId)}`;
 
   if (!taskId) {
     // First save -- create the task in this editor's PIP list with the full report.
-    const pq = quarterRange(quarterFromPipId(pipId));
-    const sevPrio = { 90: 1, 60: 2, 30: 3 }[+body.duration_d] || 2;
     const task = await clickupCreateTaskInList(env, pipList, `PIP · ${body.editor} · ${pipId}`, {
-      assignees: pipAssignee ? [pipAssignee] : null,
-      start_date: body.start_date ? Date.parse(body.start_date) : null,
-      due_date: body.review_date ? Date.parse(body.review_date) : null,
-      priority: sevPrio,
-      tags: ["PIP", pq ? pq.tag : null].filter(Boolean),
-      markdown_description: `**PIP ${pipId}** · ${body.editor} · ${body.severity || "—"} (${body.duration_d || "?"}d)
-Managers: ${(body.managers || []).join(", ") || "—"}
-Start ${body.start_date || "—"} · Final review ${body.review_date || "—"}
-
-Support actions are subtasks with their own due dates. Latest PDF attachment = current report. Live case: form URL + \`?pip=${pipId}\``
+      ...taskFields,
+      assignees: managerIds.length ? managerIds : null,
+      tags: ["PIP", pq ? pq.tag : null].filter(Boolean)
     });
     taskId = task.id;
-    await clickupComment(env, taskId, `PIP opened for ${body.editor}. Live case: this form's URL + ?pip=${pipId}`);
+    await clickupComment(env, taskId, `PIP opened for ${body.editor}. Live case: ${liveLink}`);
+    // Real content already exists at creation (the case-only "reserve" step
+    // creates no ClickUp task -- see handleCreatePipLinkTask), so this never
+    // starts life sitting untouched in "to do".
+    try { await clickupSetStatus(env, taskId, pipList, "in progress"); } catch (e) {}
+  } else {
+    // Every later save (checkpoints included) used to leave the description,
+    // dates, and priority frozen at whatever the first save looked like -- an
+    // edited severity, start date, or manager list never reached the task.
+    await clickupUpdateTask(env, taskId, taskFields);
   }
   // Sync action rows -> subtasks on EVERY save, not just the first. Matched by
   // index against last save's subtask ids (priorDetail._action_subtask_ids) --
@@ -21304,7 +21552,7 @@ Support actions are subtasks with their own due dates. Latest PDF attachment = c
     }
     try {
       const sub = await clickupCreateTaskInList(env, pipList, name, {
-        parent: taskId, assignees: pipAssignee ? [pipAssignee] : null, priority: 3, due_date, markdown_description
+        parent: taskId, assignees: managerIds.length ? managerIds : null, priority: 3, due_date, markdown_description
       });
       return sub.id;
     } catch (e) { return null; }
@@ -21321,11 +21569,12 @@ Support actions are subtasks with their own due dates. Latest PDF attachment = c
   if (isFirstSave || body._finalize) {
     await clickupAttachPdf(env, taskId, `PIP_${pipId}.pdf`, pdf);
   } else {
-    await clickupComment(env, taskId, `Progress saved. Live case: this form's URL + \`?pip=${pipId}\` (the attached PDF above is from the last checkpoint or filing, not this save).`);
+    await clickupComment(env, taskId, `Progress saved. Live case: ${liveLink} (the attached PDF above is from the last checkpoint or filing, not this save).`);
   }
   if (body._finalize && (body.verdict === "PASS" || body.verdict && body.verdict.startsWith("NOT MET"))) {
     await clickupComment(env, taskId, `Verdict FILED: ${body.verdict}. This PIP is now closed.`);
     await clickupUpdateTask(env, taskId, { priority: body.verdict === "PASS" ? 4 : 1 });
+    try { await clickupSetStatus(env, taskId, pipList, "complete"); } catch (e) {}
   }
 
   const detailWithTask = { ...body, _clickup_task_id: taskId, _action_subtask_ids: actionSubtaskIds, _filed: !!body._finalize || (existing.length && existing[0].detail && existing[0].detail._filed) || false };
@@ -21428,6 +21677,9 @@ var index_default = {
       }
       if (path === "/peer/aggregate" && request.method === "GET") {
         return await handlePeerAggregate(env, url.searchParams.get("target"), url.searchParams.get("cycle"), url.searchParams.get("key"));
+      }
+      if (path === "/selftest" && request.method === "GET") {
+        return await handleSelfTest(env, url.searchParams.get("key"));
       }
       if (path === "/kpi/cases" && request.method === "GET") {
         return await handleKpiCases(env, url.searchParams.get("cycle"), url.searchParams.get("key"));

@@ -67,6 +67,19 @@
   </div>
   <div id="bootBanner"></div>
 
+  <div class="section" style="--sa:var(--muted)">
+    <div class="seyebrow" style="--sa:#6b7280">System check</div>
+    <h2>Is everything connected?</h2>
+    <p class="lede">One read-only pass over the whole chain — Supabase tables and migrations, the live rubric config, your ClickUp token/space/lists, and the Sheet mirror. It creates and changes nothing. Run it after any deploy, or whenever something looks wrong.</p>
+    <div class="card">
+      <div class="row" style="align-items:center">
+        <button class="btn" id="selftestBtn" type="button">Run system check</button>
+        <span id="selftestSummary" class="lede" style="margin:0"></span>
+      </div>
+      <div id="selftestOut" style="margin-top:14px"></div>
+    </div>
+  </div>
+
   <div class="section" style="--sa:var(--kpi)">
     <div class="seyebrow">KPI</div>
     <h2>Personal links</h2>
@@ -170,10 +183,22 @@ function currentCycle(){
 }
 function fillRoster(){
   const roster=ROSTER.map(r=>r.name).sort();
-  const raterSel=document.getElementById('raterSel'),targetSel=document.getElementById('targetSel'),pipSel=document.getElementById('pipEditorSel');
-  raterSel.innerHTML='<option value="">Select…</option>'+roster.map(n=>`<option>${n}</option>`).join('');
-  targetSel.innerHTML='<option value="">Select…</option>'+roster.map(n=>`<option>${n}</option>`).join('');
+  const pipSel=document.getElementById('pipEditorSel');
   pipSel.innerHTML='<option value="">Select…</option>'+roster.map(n=>`<option>${n}</option>`).join('');
+  refreshPairSelects();
+}
+// Rater and Rates must never offer the same person -- nobody rates themselves.
+// The server rejects it (400), but the dropdown shouldn't present it as a valid
+// choice at all. Each select is rebuilt excluding the other's current pick, and
+// re-run on every change so it stays correct as the admin switches people around.
+function refreshPairSelects(){
+  const roster=ROSTER.map(r=>r.name).sort();
+  const raterSel=document.getElementById('raterSel'),targetSel=document.getElementById('targetSel');
+  const rater=raterSel.value,target=targetSel.value;
+  const opts=(exclude,sel)=>'<option value="">Select…</option>'+roster.filter(n=>n!==exclude)
+    .map(n=>`<option${n===sel?' selected':''}>${n}</option>`).join('');
+  raterSel.innerHTML=opts(target,rater);
+  targetSel.innerHTML=opts(rater,target);
 }
 async function addPipLinkTask(){
   const name=document.getElementById('pipEditorSel').value;
@@ -190,6 +215,39 @@ async function addPipLinkTask(){
     if(j.link)window.open(j.link,'_blank','noopener');
   }catch(e){ errEl.textContent=e.message;errEl.hidden=false; }
   btn.disabled=false;btn.textContent='Create case';
+}
+async function runSelfTest(){
+  const btn=document.getElementById('selftestBtn'),out=document.getElementById('selftestOut'),sum=document.getElementById('selftestSummary');
+  btn.disabled=true;btn.textContent='Checking…';out.innerHTML='';sum.textContent='';
+  try{
+    const j=await api('/selftest');
+    const pill=s=>s==='pass'?'<span class="pill done">✓ pass</span>'
+      :s==='fail'?'<span class="pill fail">✕ fail</span>'
+      :s==='warn'?'<span class="pill" style="background:#fdf3e8;color:#7c4a06">! warn</span>'
+      :'<span class="pill pending">info</span>';
+    out.innerHTML='<table><thead><tr><th style="width:190px">Check</th><th style="width:90px">Result</th><th>Detail</th></tr></thead><tbody>'+
+      j.checks.map(c=>`<tr><td><b>${c.name}</b></td><td>${pill(c.status)}</td><td style="color:var(--muted)">${c.detail||''}</td></tr>`).join('')+
+      '</tbody></table>';
+    sum.innerHTML=j.ok
+      ? `<b style="color:var(--hi)">All good.</b> ${j.warned?j.warned+' warning(s) — optional features only.':'No warnings.'}`
+      : `<b style="color:var(--lo)">${j.failed} check(s) failed.</b> Fix those before trusting the system.`;
+  }catch(e){ out.innerHTML=`<div class="err">Couldn't run the check: ${e.message}</div>`; }
+  btn.disabled=false;btn.textContent='Run system check';
+}
+// Small non-blocking confirmation of where a ClickUp task actually landed.
+// ClickUp's own UI can lag a few seconds before a new task shows up, so this
+// also tells you it definitely exists rather than leaving you refreshing.
+function showTaskPlacement(msg,url){
+  let el=document.getElementById('taskToast');
+  if(!el){
+    el=document.createElement('div');el.id='taskToast';
+    el.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:60;background:#17191d;color:#fff;font-size:13px;line-height:1.5;padding:12px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);max-width:min(560px,92vw);display:flex;gap:12px;align-items:center';
+    document.body.appendChild(el);
+  }
+  el.innerHTML=`<span>${msg}</span>`+(url?`<a href="${url}" target="_blank" rel="noopener" style="color:#a5b4fc;font-weight:650;white-space:nowrap">Open ↗</a>`:'');
+  el.style.display='flex';
+  clearTimeout(showTaskPlacement._t);
+  showTaskPlacement._t=setTimeout(()=>{el.style.display='none';},9000);
 }
 function wireCopy(root){
   root.querySelectorAll('.copyBtn').forEach(b=>b.addEventListener('click',async()=>{
@@ -220,11 +278,13 @@ async function addKpiLinkTask(btn){
   if(!cycle){alert('Pick a quarter and year in the Case tracker below first — the task is scoped to that quarter.');return;}
   btn.disabled=true;btn.textContent='Adding…';
   try{
-    await api('/kpi/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:name,quarter:cycle})});
+    const j=await api('/kpi/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:name,quarter:cycle})});
     // loadKpiTracker() re-syncs every button (including this one) to "✓ Task added"
     // and keeps it disabled -- clicking again would mint a second, orphaned case id
     // for the same editor+quarter instead of doing anything useful.
     await loadKpiTracker();
+    if(j.reused)showTaskPlacement(`${name} already had an open task for ${cycle} — reused it instead of creating a second one.`,j.task_url);
+    else if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${name} › ${j.list_name}`,j.task_url);
   }catch(e){ btn.disabled=false;btn.textContent='Add task in ClickUp'; alert('Failed to create task: '+e.message); }
 }
 
@@ -253,9 +313,13 @@ async function loadKpiTracker(){
     </tr>`).join('');
   tbody.querySelectorAll('.kpiDelBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm(`Remove case ${id} from this tracker?\n\nThis only removes it from our system — it does not touch or delete anything in ClickUp.`))return;
+    if(!confirm(`Remove case ${id}?\n\nThis deletes the case here AND its ClickUp task, so the two stay in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`))return;
     b.disabled=true;b.textContent='Removing…';
-    try{ await api(`/kpi/cases/${encodeURIComponent(id)}`,{method:'DELETE'}); await loadKpiTracker(); }
+    try{
+      const j=await api(`/kpi/cases/${encodeURIComponent(id)}`,{method:'DELETE'});
+      await loadKpiTracker();
+      if(j.had_task&&!j.clickup_deleted)alert(`Case ${id} was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.`);
+    }
     catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
   }));
   syncKpiTaskButtons();
@@ -297,9 +361,13 @@ async function loadPipTracker(){
   }).join('');
   tbody.querySelectorAll('.pipDelBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm(`Remove PIP case ${id} from this tracker?\n\nThis only removes it from our system — it does not touch or delete anything in ClickUp.`))return;
+    if(!confirm(`Remove PIP case ${id}?\n\nThis deletes the case here AND its ClickUp task, so the two stay in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`))return;
     b.disabled=true;b.textContent='Removing…';
-    try{ await api(`/pip/cases/${encodeURIComponent(id)}`,{method:'DELETE'}); await loadPipTracker(); }
+    try{
+      const j=await api(`/pip/cases/${encodeURIComponent(id)}`,{method:'DELETE'});
+      await loadPipTracker();
+      if(j.had_task&&!j.clickup_deleted)alert(`PIP ${id} was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.`);
+    }
     catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
   }));
 }
@@ -324,6 +392,9 @@ async function boot(){
     document.getElementById('cQ').addEventListener('change',loadRows);
     document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadRows();});
     document.getElementById('addBtn').addEventListener('click',addAssignment);
+    document.getElementById('selftestBtn').addEventListener('click',runSelfTest);
+    document.getElementById('raterSel').addEventListener('change',refreshPairSelects);
+    document.getElementById('targetSel').addEventListener('change',refreshPairSelects);
     document.getElementById('pipTaskBtn').addEventListener('click',addPipLinkTask);
     document.getElementById('kQ').addEventListener('change',loadKpiTracker);
     document.getElementById('kY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadKpiTracker();});
@@ -368,10 +439,14 @@ async function addPeerLinkTask(btn){
   const tr=btn.closest('tr'),rater=tr.dataset.rater,cycle=currentCycle();
   btn.disabled=true;btn.textContent='Adding…';
   try{
-    await api('/peer/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rater_name:rater,cycle})});
+    const j=await api('/peer/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rater_name:rater,cycle})});
     // One task per rater per cycle -- reload so every row for this rater (they may
     // rate several people) reflects the same done state, not just this one button.
     await loadRows();
+    // Say exactly where it went. The prompt lives in the person's To-do list, not
+    // their Peer list (which holds scorecards ABOUT them) -- without this, looking
+    // in the wrong list reads as "the button did nothing".
+    if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${j.folder_name||rater} › ${j.list_name}`,j.task_url);
   }catch(e){ btn.disabled=false;btn.textContent='Add task'; alert('Failed to create task: '+e.message); }
 }
 
