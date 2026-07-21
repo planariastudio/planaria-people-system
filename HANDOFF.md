@@ -54,12 +54,12 @@ Space (`CLICKUP_SPACE_ID`) → **one folder per person** → four lists:
 | **PIP** | PIP case task — created only on the **first real save** of case data (not when the case is reserved), support actions as subtasks with "by when" due dates, PDF at first save and at checkpoint/filing only |
 
 Conventions:
-- **Status is carried in the task name suffix** (`· Awaiting supervisor`, `· Filed ✓`, `· 1 of 2 done`, `· All done ✓`) — NOT ClickUp status fields (workspace status names were unknown, so name-suffix was chosen deliberately).
-- **Tags:** exactly two per task — the instrument (`KPI` / `Peer Appraisal` / `PIP`) and the quarter (`Q3-2026` format).
+- **Status lives in two places, deliberately redundant.** The task name suffix (`· Awaiting supervisor`, `· Filed ✓`, `· 1 of 2 done`, `· All done ✓`) is the always-present source of truth. Real ClickUp status transitions (`to do`/`in progress`/`complete`) are ALSO set, best-effort, against whichever list the task actually lives in — matched case-insensitively against that list's real statuses, silently no-op if unmatched. If status-setting ever fails, the name suffix still communicates state.
+- **Tags:** exactly two per task — the instrument (`KPI` / `Peer Appraisal` / `PIP`) and the quarter (`Q3-2026` format). Requires the **Tags** and **Priority** ClickApps to be enabled workspace-wide, or both get silently rejected by the API.
 - Assignee is auto-resolved by matching ClickUp username/email-prefix to roster name (known gap: silently unassigned on mismatch — see §9).
 - Moving the KPI task from To-do → KPI at filing uses ClickUp's "Tasks in Multiple Lists" ClickApp. If it's not enabled, the task safely **stays in To-do** marked `Filed ✓`/Complete — it is never removed from To-do unless the add to KPI succeeded first, so it can't end up in no list at all.
-- **Removing a case cascades:** the Remove buttons in `links_admin.html` delete the Supabase row *and* the ClickUp task (ClickUp deletes are restorable from workspace trash for ~30 days). Removing a single peer *assignment* does not delete the rater's prompt task — it just refreshes that task's target list.
-- Statuses are set best-effort against the list the task actually lives in, matched case-insensitively; unmatched = silent no-op, with the task-name suffix as the always-present fallback.
+- **Removing a case cascades across all three systems:** the Remove buttons in `links_admin.html` delete the Supabase row, the ClickUp task, and (if one exists) the matching Sheet row — everything stays in sync. ClickUp deletes land in workspace trash (restorable ~30 days); Sheet deletes do not have an equivalent undo. Removing a peer *assignment* additionally deletes that rater's submitted rating from `Peer_Raw` if they'd already rated the target — the client warns specifically when this is the case, since it's meaningfully different from removing an unused pairing.
+- **Sheet delete-by-key** (`scripts/sheet_mirror_v2_Code.gs`) is keyed differently per tab: KPI_Raw by a trailing "Case ID" column (added at the *end* of the header row on purpose, so an already-live sheet's existing columns/formulas never shift — the header self-migrates on first use, no manual sheet edit needed); PIP_Raw by its existing first-column PIP ID; Peer_Raw has no single-column key, so delete matches the composite (Rater Token, Target, Cycle), which is already unique server-side.
 - ClickUp's API cannot replace/delete attachments, which is why PDFs attach only at meaningful snapshots, with comments in between.
 
 ## 5. Flows, step by step (source material for the guidebooks)
@@ -130,12 +130,22 @@ Two documents, matching the visual style of the existing pages (Inter font, shar
 
 An earlier `people_system_guide.html` + `Planaria_People_System_Guide.pdf` exist in the repo as a starting point but predate most of the current behavior — treat them as outdated.
 
-## 11. Deploy state at handoff (2026-07-19)
+## 11. Deploy state at handoff (2026-07-21)
 
-Everything above is implemented and verified locally but **not yet deployed**: the working tree has modified `worker/index.js`, `links_admin.html`, `kpi_scorecard.html`, `kpi_result_card.html`, `peer_appraisal.html`, `peer_growth_view.html`, `pip.html`, plus new `kpi_card.js` and `peer_card.js`. One pending Supabase migration:
+Everything above is implemented and verified locally. Three things need redeploying/running, in this order:
 
+1. **Supabase SQL** — two migrations. `kpi_case.reminder_task_id` and the `peer_reminder` table are already run. Still pending or newly added:
 ```sql
+-- lets To-do list ids be cached (degrades gracefully if skipped)
 alter table clickup_map add column if not exists todo_list_id text;
+-- peer_reminder was created with only a composite UNIQUE constraint, no real
+-- primary key -- Supabase's table-editor UI can't delete/edit rows without one.
+alter table peer_reminder add column id bigserial;
+alter table peer_reminder add primary key (id);
 ```
+2. **Worker** — paste `worker/index.js` into the Cloudflare dashboard as usual. Verify with `node --input-type=module --check < worker/index.js` first (`npm run check` does this plus every page).
+3. **Apps Script** (`scripts/sheet_mirror_v2_Code.gs`) — must also be re-pasted into the Sheet's Extensions → Apps Script editor and **re-deployed** (Deploy → Manage deployments → edit → new version) for the Remove-buttons' Sheet cascade to work. This is a separate deploy target from the Worker and is easy to forget.
 
-(Earlier migrations — `kpi_case.reminder_task_id` and the `peer_reminder` table — are already run and confirmed.) The system degrades gracefully if this migration is skipped (the To-do list id just isn't cached), but run it anyway.
+Also run `npm run check` (or just open `links_admin.html` → **Run system check**) after all three land — it verifies Supabase tables/migrations, ClickUp token/space/statuses, and Sheet webhook config in one pass.
+
+`ARCHITECTURE_REVIEW.md` covers code-quality/scalability findings separately; `tests/` (run via `npm test`) has committed regression coverage for the trickier pieces — the KPI idempotency guard, the case-ID minting race, the peer final-PDF re-fire logic, and the Sheet mirror's header self-migration.
