@@ -170,6 +170,12 @@ async function loadConfig(){
   ALLVALUES=CLUSTERS.flatMap(c=>c.values.map(v=>v.label));
 }
 const RATER_TOKEN=new URLSearchParams(location.search).get('t')||null;
+// When a link was minted for one specific pairing (links_admin's per-assignment
+// "Add task in ClickUp"), the target + cycle are baked into the URL so the rater
+// never has to pick from a dropdown -- see applyDeepLinkTarget() in boot(). A
+// bare personal link (no target param) still falls back to the full picker.
+const TARGET_PARAM=new URLSearchParams(location.search).get('target')||null;
+const CYCLE_PARAM=new URLSearchParams(location.search).get('cycle')||null;
 const state={ratings:{},target:'',target_id:'',level:'',cycle:'',track_reco:null};
 let STEPS=['0','written','review'];
 let cur=0;
@@ -210,7 +216,12 @@ function resetRatings(){
 }
 var _cyQ=document.getElementById('cycleQ'),_cyY=document.getElementById('cycleY'),_cyH=document.getElementById('cycle');
 function _composeCycle(){state.cycle=(_cyQ.value&&_cyY.value.length===4)?(_cyQ.value+' '+_cyY.value):'';_cyH.value=state.cycle;validate();}
-(function(){var n=new Date();_cyQ.value='Q'+(Math.floor(n.getMonth()/3)+1);_cyY.value=String(n.getFullYear());_composeCycle();})();
+(function(){
+  var m=CYCLE_PARAM&&/^Q([1-4])\s+(\d{4})$/.exec(CYCLE_PARAM.trim());
+  if(m){_cyQ.value='Q'+m[1];_cyY.value=m[2];}
+  else{var n=new Date();_cyQ.value='Q'+(Math.floor(n.getMonth()/3)+1);_cyY.value=String(n.getFullYear());}
+  _composeCycle();
+})();
 _cyY.addEventListener('input',function(){_cyY.value=_cyY.value.replace(/\D/g,'').slice(0,4);_composeCycle();loadAssignments();});
 _cyQ.addEventListener('change',function(){_composeCycle();loadAssignments();});
 
@@ -253,13 +264,20 @@ function loadAssignments(){
     .then(function(r){return r.json();})
     .then(function(j){
       if(cyc!==state.cycle)return;           // a later cycle change already superseded this
-      if(!j||!j.found){fillTargets(rosterAll(),'');return;}
+      if(!j||!j.found){ if(TARGET_PARAM){showTargetNotFound();}else{fillTargets(rosterAll(),'');} return;}
       ASSIGN_STATE=j;
       var byName={};ROSTER.forEach(function(r){byName[r[0]]={name:r[0],level:r[1],slug:r[2]};});
       var list=(j.assignments||[]).map(function(a){
         var m=byName[a.target]||{name:a.target,level:'',slug:''};
         return{name:m.name,level:m.level,slug:m.slug,done:a.done};
       });
+      // Deep link from a per-assignment ClickUp task -- go straight to rating
+      // this one person, no dropdown. See applyDeepLinkTarget().
+      if(TARGET_PARAM){
+        var match=list.find(function(p){return p.name===TARGET_PARAM;});
+        if(match){applyDeepLinkTarget(match);}else{showTargetNotFound();}
+        return;
+      }
       if(!list.length){
         fillTargets(rosterAll(),'<span class="tnote warn">No one is assigned to you for <b>'+cyc+'</b> yet — showing everyone. Check the cycle, or ask your admin to set your assignments.</span>');
         return;
@@ -270,7 +288,43 @@ function loadAssignments(){
         : '<span class="tnote">Assigned to you for <b>'+cyc+'</b>: '+list.length+' peer'+(list.length===1?'':'s')+' · '+open+' left to rate.</span>';
       fillTargets(list,note);
     })
-    .catch(function(){ fillTargets(rosterAll(),''); });
+    .catch(function(){ if(!TARGET_PARAM) fillTargets(rosterAll(),''); });
+}
+// This link was minted for exactly one pairing -- fill the (now hidden) picker
+// state directly and skip straight to the rating clusters. If they've already
+// rated this person this cycle, say so instead of re-showing the form.
+function applyDeepLinkTarget(match){
+  if(match.done){showAlreadyRated(match.name);return;}
+  fillTargets([match],'');
+  tgt.value=match.name;tgt.onchange();
+  lockPickerCard(match.name);
+  if(cur===0)go(1);
+}
+function lockPickerCard(name){
+  var card=document.querySelector('.card.step[data-step="0"]');
+  if(!card)return;
+  card.querySelector('.row2').style.display='none';
+  var locked=document.createElement('div');
+  locked.className='tnote ok';
+  locked.textContent='Rating '+name+' for '+state.cycle+'.';
+  card.appendChild(locked);
+}
+function showAlreadyRated(name){
+  hideNavAndPicker();
+  document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+    '<div class="card" style="text-align:center;padding:34px 24px"><div style="font-size:38px">✓</div>'+
+    '<p class="stitle" style="margin-top:8px">Already rated</p>'+
+    '<p class="sdesc">You’ve already rated <b>'+name+'</b> for <b>'+state.cycle+'</b>. Nothing left to do here.</p></div>');
+}
+function showTargetNotFound(){
+  hideNavAndPicker();
+  document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+    '<div class="card" style="text-align:center;padding:34px 24px"><p class="stitle">Assignment not found</p>'+
+    '<p class="sdesc">This link’s pairing isn’t on your list for this cycle anymore — it may have been removed. Ask your supervisor to resend it.</p></div>');
+}
+function hideNavAndPicker(){
+  document.querySelectorAll('.card.step').forEach(function(s){s.classList.remove('on');});
+  document.querySelector('.nav').style.display='none';
 }
 
 function paintAnchors(){
@@ -433,8 +487,10 @@ function boot(){
     STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();
     tgt.length=1; // reset to placeholder before repopulating (safe on retry)
     // Seed with the full roster so the form is usable immediately, then narrow to
-    // this rater's actual assignments once the Worker answers.
-    fillTargets(rosterAll(),'');
+    // this rater's actual assignments once the Worker answers. Skipped entirely
+    // for a deep link (TARGET_PARAM) -- no need to flash the full picker before
+    // applyDeepLinkTarget() replaces it a moment later.
+    if(!TARGET_PARAM) fillTargets(rosterAll(),'');
     paint();
     loadAssignments();
   }).catch(function(e){ bootBanner('Couldn’t reach the server — it may be waking up (first load can take ~10s). '+(e&&e.message?'('+e.message+') ':'')); });

@@ -67,19 +67,6 @@
   </div>
   <div id="bootBanner"></div>
 
-  <div class="section" style="--sa:var(--muted)">
-    <div class="seyebrow" style="--sa:#6b7280">ClickUp</div>
-    <h2>Set up every editor's space</h2>
-    <p class="lede">Creates each active editor's ClickUp Folder and their KPI / Peer / PIP / To-do lists right now, instead of waiting for the first task to create them. Safe to run any time — editors who already have their folder are skipped.</p>
-    <div class="card">
-      <div class="row" style="align-items:center">
-        <button class="btn" id="provisionBtn" type="button">Create ClickUp folders for all editors</button>
-        <span id="provisionSummary" class="lede" style="margin:0"></span>
-      </div>
-      <div id="provisionOut" style="margin-top:14px"></div>
-    </div>
-  </div>
-
   <div class="section" style="--sa:var(--kpi)">
     <div class="seyebrow">KPI</div>
     <h2>Personal links</h2>
@@ -215,38 +202,6 @@ async function addPipLinkTask(){
     if(j.link)window.open(j.link,'_blank','noopener');
   }catch(e){ errEl.textContent=e.message;errEl.hidden=false; }
   btn.disabled=false;btn.textContent='Create case';
-}
-// One Worker request per editor, run sequentially (not Promise.all) -- each
-// editor's setup can take 8-10 ClickUp/Supabase calls, and a single Worker
-// invocation has a hard cap on total subrequests. Looping the whole roster in
-// one request blew past that cap partway through, so each editor gets its own
-// invocation (and fresh subrequest budget) here instead.
-async function runProvisionAll(){
-  const btn=document.getElementById('provisionBtn'),out=document.getElementById('provisionOut'),sum=document.getElementById('provisionSummary');
-  btn.disabled=true;out.innerHTML='';sum.textContent='';
-  const pill=ok=>ok===null?'<span class="pill pending">…</span>':ok?'<span class="pill done">✓ ready</span>':'<span class="pill fail">✕ failed</span>';
-  const people=ROSTER.slice().sort((a,b)=>a.name.localeCompare(b.name));
-  out.innerHTML='<table><thead><tr><th>Editor</th><th style="width:110px">Result</th><th>Detail</th></tr></thead><tbody>'+
-    people.map(p=>`<tr id="prow-${p.id}"><td><b>${p.name}</b></td><td class="pcell">${pill(null)}</td><td class="dcell" style="color:var(--muted)"></td></tr>`).join('')+
-    '</tbody></table>';
-  let done=0,failed=0;
-  for(const p of people){
-    btn.textContent=`Setting up… (${done+1}/${people.length})`;
-    const row=document.getElementById(`prow-${p.id}`);
-    try{
-      await api('/clickup/provision-one',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_id:p.id,editor_name:p.name})});
-      row.querySelector('.pcell').innerHTML=pill(true);
-    }catch(e){
-      failed++;
-      row.querySelector('.pcell').innerHTML=pill(false);
-      row.querySelector('.dcell').textContent=e.message;
-    }
-    done++;
-  }
-  sum.innerHTML=failed===0
-    ? `<b style="color:var(--hi)">All set.</b> ${done} editor(s) have a folder + lists in ClickUp.`
-    : `<b style="color:var(--lo)">${failed} of ${done} failed.</b> See detail column.`;
-  btn.disabled=false;btn.textContent='Create ClickUp folders for all editors';
 }
 // Small non-blocking confirmation of where a ClickUp task actually landed.
 // ClickUp's own UI can lag a few seconds before a new task shows up, so this
@@ -408,7 +363,6 @@ async function boot(){
     document.getElementById('cQ').addEventListener('change',loadRows);
     document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadRows();});
     document.getElementById('addBtn').addEventListener('click',addAssignment);
-    document.getElementById('provisionBtn').addEventListener('click',runProvisionAll);
     document.getElementById('raterSel').addEventListener('change',refreshPairSelects);
     document.getElementById('targetSel').addEventListener('change',refreshPairSelects);
     document.getElementById('pipTaskBtn').addEventListener('click',addPipLinkTask);
@@ -450,25 +404,27 @@ async function loadRows(){
     // -- removing the pairing deletes that too, not just the planning row, so
     // this warning is meaningfully different from the "nothing submitted yet" case.
     const msg=tr.dataset.completed
-      ? `Remove ${tr.dataset.rater}'s assignment to rate ${tr.children[1].textContent}?\n\nThey already submitted a rating for this — removing the assignment also deletes that submitted rating from the Sheet (Peer_Raw). This does not affect the pooled scores shown elsewhere if others also rated this person.`
-      : 'Remove this assignment? (Nothing has been submitted for it yet.)';
+      ? `Remove ${tr.dataset.rater}'s assignment to rate ${tr.children[1].textContent}?\n\nThis deletes the assignment here, its ClickUp task if one was created, and their submitted rating from the Sheet (Peer_Raw). This does not affect the pooled scores shown elsewhere if others also rated this person.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`
+      : `Remove this assignment?\n\nThis deletes it here and its ClickUp task if one was created. Nothing has been submitted for it yet.`;
     if(!confirm(msg))return;
-    try{ await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'}); tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';} }
+    try{
+      const j=await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'});
+      tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';}
+      if(j.clickup_deleted===false)alert('The assignment was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
+    }
     catch(e){ alert('Failed to remove: '+e.message); }
   }));
 }
 async function addPeerLinkTask(btn){
-  const tr=btn.closest('tr'),rater=tr.dataset.rater,cycle=currentCycle();
+  const tr=btn.closest('tr'),id=tr.dataset.id,rater=tr.dataset.rater;
   btn.disabled=true;btn.textContent='Adding…';
   try{
-    const j=await api('/peer/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rater_name:rater,cycle})});
-    // One task per rater per cycle -- reload so every row for this rater (they may
-    // rate several people) reflects the same done state, not just this one button.
-    await loadRows();
-    // Say exactly where it went. The prompt lives in the person's To-do list, not
-    // their Peer list (which holds scorecards ABOUT them) -- without this, looking
-    // in the wrong list reads as "the button did nothing".
-    if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${j.folder_name||rater} › ${j.list_name}`,j.task_url);
+    // One task per (rater, target, cycle) pairing -- the link it carries is
+    // pre-scoped to exactly this row, so the rater never has to pick who they're
+    // rating when they open it (see peer_appraisal.html's target/cycle params).
+    const j=await api('/peer/create-assignment-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
+    btn.disabled=true;btn.textContent='✓ Task added';
+    if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${rater} › ${j.list_name}`,j.task_url);
   }catch(e){ btn.disabled=false;btn.textContent='Add task'; alert('Failed to create task: '+e.message); }
 }
 
