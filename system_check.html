@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System check — Planaria People System</title>
+<style>
+  :root{
+    --canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--line:#e6e8eb;
+    --kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+    --lo:#e0603b;--mid:#e3a008;--mid-ink:#b45309;--hi:#2f9e7e;--r:10px;
+  }
+  *{box-sizing:border-box}html,body{margin:0}
+  body{font-family:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;background:var(--canvas);color:var(--ink);font-size:15px;line-height:1.5}
+  .wrap{max-width:920px;margin:0 auto;padding:26px 18px 80px}
+  .mast{padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:24px}
+  h1{margin:0;font-size:24px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13.5px;margin:6px 0 0;max-width:70ch}
+  .adminchip{display:inline-block;margin-top:10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--card);border:1px solid var(--line);padding:5px 11px;border-radius:99px}
+  .section{margin-bottom:28px}
+  .seyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--sa);margin-bottom:7px}
+  .seyebrow::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--sa)}
+  .section .lede{color:var(--muted);font-size:13px;margin:5px 0 14px;max-width:80ch}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+  .warn{background:#fdf3e8;border:1px solid #f0c98a;color:#7c4a06;border-radius:12px;padding:14px 18px;font-size:13.5px;line-height:1.6}
+  .warn b{color:#5c3600}
+  .warn ul{margin:8px 0 0;padding-left:20px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .f{flex:1;min-width:180px}
+  .f label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-bottom:5px}
+  .f select,.f input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fff}
+  .btn{padding:10px 16px;border-radius:8px;font:inherit;font-weight:650;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btn.kpi{background:var(--kpi);color:#fff;border-color:var(--kpi)}
+  .btn.peer{background:var(--peer);color:#fff;border-color:var(--peer)}
+  .btn.pip{background:var(--pip);color:#fff;border-color:var(--pip)}
+  .btn.danger{background:var(--lo);color:#fff;border-color:var(--lo)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .log{border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px}
+  .log .row2{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-bottom:1px solid #f1f2f4}
+  .log .row2:last-child{border-bottom:none}
+  .log .ic{flex:0 0 auto;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;margin-top:1px}
+  .log .ic.ok{background:var(--hi)} .log .ic.fail{background:var(--lo)} .log .ic.run{background:var(--muted)}
+  .log .body{flex:1;min-width:0}
+  .log .t{font-weight:650}
+  .log .d{color:var(--muted);font-size:12px;margin-top:2px;word-break:break-word}
+  .log a{color:var(--kpi);font-weight:650;text-decoration:none;white-space:nowrap}
+  .log a:hover{text-decoration:underline}
+  .empty{color:var(--muted);font-size:13px;padding:16px;text-align:center}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:9px 10px;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px;border-bottom:1px solid #f1f2f4;vertical-align:middle}
+  .idtag{font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:12px;background:var(--canvas);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+</style>
+</head>
+<body>
+<div id="appWrap" class="wrap" hidden>
+  <div class="mast">
+    <h1>System check</h1>
+    <div class="sub">Runs a real, end-to-end pass through KPI, Peer Appraisal, and PIP — creating a real case in Supabase and a real task in ClickUp for each, using real roster identities. This is the most reliable way to confirm the whole chain actually works, because it's the same code path the live forms use — nothing is mocked.</div>
+    <span class="adminchip">Admin only · unlisted</span>
+  </div>
+
+  <div class="section">
+    <div class="warn">
+      <b>Before you run this — read this once.</b> The people you pick below will get real ClickUp tasks assigned to them, which usually means a real ClickUp notification. This is not a sandbox.
+      <ul>
+        <li>Pick people who won't be confused by a "PIP" or "KPI" task briefly appearing on their name — yourself, if you're on the roster, is the safest choice for every role below.</li>
+        <li>The test quarter defaults to <b>Q4 2099</b> — deliberately outside any real cycle, so test cases are easy to spot and never mix with real quarterly data.</li>
+        <li>Every note/evidence field this tool writes is prefixed <b>"[SYSTEM CHECK]"</b> so it's unmistakable in ClickUp and Supabase.</li>
+        <li>Use <b>Clean up</b> at the bottom when you're done — it deletes everything this run created from Supabase, ClickUp, and the Sheet, the same cascade the Remove buttons in links_admin.html use.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section" style="--sa:#6b7280">
+    <div class="seyebrow">Setup</div>
+    <div class="card">
+      <div class="row">
+        <div class="f"><label>Test subject (KPI + PIP + Peer target)</label><select id="subjectSel"><option value="">Select…</option></select></div>
+        <div class="f"><label>Peer rater A</label><select id="raterASel"><option value="">Select…</option></select></div>
+        <div class="f"><label>Peer rater B</label><select id="raterBSel"><option value="">Select…</option></select></div>
+        <div class="f" style="max-width:140px"><label>Test cycle</label><input id="cycleInp" value="Q4 2099"></div>
+      </div>
+      <div class="btnrow">
+        <button class="btn primary" id="runAllBtn" type="button" disabled>Run all checks</button>
+        <button class="btn kpi" id="runKpiBtn" type="button" disabled>Run KPI only</button>
+        <button class="btn peer" id="runPeerBtn" type="button" disabled>Run Peer only</button>
+        <button class="btn pip" id="runPipBtn" type="button" disabled>Run PIP only</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="--sa:#17191d">
+    <div class="seyebrow">Live log</div>
+    <div class="log" id="logBox"><div class="empty">Pick people above, then run a check — each step appears here as it happens.</div></div>
+  </div>
+
+  <div class="section" style="--sa:#e0603b">
+    <div class="seyebrow">Clean up</div>
+    <p class="lede">Removes everything a check created in this browser session — Supabase rows, ClickUp tasks, and Sheet rows, cascaded the same way the Remove buttons in links_admin.html work. Nothing to clean up until you've run a check.</p>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>What</th><th>ID</th><th></th></tr></thead>
+        <tbody id="createdRows"><tr><td colspan="3" class="empty">Nothing created yet.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="btnrow">
+      <button class="btn danger" id="cleanupBtn" type="button" disabled>Delete everything this session created</button>
+    </div>
+  </div>
+</div>
+<div id="bootBanner" class="wrap"></div>
+
+<script>
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+const KEY='Planaria-admin';
+const PAGES_BASE='https://planariastudio.github.io/planaria-people-system';
+const PEER_VALUES=["Growth Potential","Agility","Continuous Improvement","Teamwork","Knowledge Sharing","Conflict Resolution","Communication & Handoff","Visibility","Deep Dive","Accountability","Reliability & Deadlines","Fill-the-Gap Attitude","Quality of Work","Integrity","Earn Trust"];
+let ROSTER=[];
+const CREATED=[]; // {kind,label,id,extra}
+
+async function api(path,opt){
+  const sep=path.includes('?')?'&':'?';
+  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+
+function log(status,title,detail,url){
+  const box=document.getElementById('logBox');
+  if(box.querySelector('.empty')) box.innerHTML='';
+  const row=document.createElement('div');row.className='row2';
+  row.innerHTML=`<div class="ic ${status}">${status==='ok'?'✓':status==='fail'?'✕':'…'}</div>`+
+    `<div class="body"><div class="t">${title}</div>${detail?`<div class="d">${detail}</div>`:''}</div>`+
+    (url?`<a href="${url}" target="_blank" rel="noopener">Open ↗</a>`:'');
+  box.appendChild(row);
+  box.scrollTop=box.scrollHeight;
+  return row;
+}
+function logUpdate(row,status,title,detail,url){
+  row.querySelector('.ic').className=`ic ${status}`;row.querySelector('.ic').textContent=status==='ok'?'✓':status==='fail'?'✕':'…';
+  row.querySelector('.t').textContent=title;
+  const d=row.querySelector('.d');
+  if(detail){ if(d) d.textContent=detail; else row.querySelector('.body').insertAdjacentHTML('beforeend',`<div class="d">${detail}</div>`); }
+  if(url && !row.querySelector('a')) row.insertAdjacentHTML('beforeend',`<a href="${url}" target="_blank" rel="noopener">Open ↗</a>`);
+}
+async function step(title, fn){
+  const row=log('run',title,'running…');
+  try{
+    const {detail,url}=await fn();
+    logUpdate(row,'ok',title,detail,url);
+    return true;
+  }catch(e){
+    logUpdate(row,'fail',title,e.message);
+    return false;
+  }
+}
+
+function renderCreated(){
+  const tbody=document.getElementById('createdRows');
+  if(!CREATED.length){tbody.innerHTML='<tr><td colspan="3" class="empty">Nothing created yet.</td></tr>';document.getElementById('cleanupBtn').disabled=true;return;}
+  tbody.innerHTML=CREATED.map(c=>`<tr><td>${c.label}</td><td><span class="idtag">${c.id}</span></td><td>${c.deleted?'<span style="color:var(--hi);font-weight:650">Deleted ✓</span>':''}</td></tr>`).join('');
+  document.getElementById('cleanupBtn').disabled=CREATED.every(c=>c.deleted);
+}
+
+/* ===== KPI ===== */
+async function runKpi(){
+  const subj=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
+  const cycle=document.getElementById('cycleInp').value.trim();
+  if(!subj){log('fail','KPI check','Pick a test subject first.');return;}
+  let caseId=null;
+  const ok1=await step('KPI: create case + ClickUp task',async()=>{
+    const j=await api('/kpi/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:subj.name,quarter:cycle})});
+    caseId=j.case_id;
+    CREATED.push({kind:'kpi',label:'KPI case',id:caseId});renderCreated();
+    return {detail:`Case ${caseId}${j.reused?' (reused existing open case)':''}`,url:j.task_url};
+  });
+  if(!ok1||!caseId) return;
+  const cats=[{name:'1  Output Quality & Craft',metrics:[{metric:'Pacing & rhythm',target:'[SYSTEM CHECK] target text'}]}];
+  const editorData={self:{'0-0':4},actual:{'0-0':'[SYSTEM CHECK] synthetic self-review entry.'},selfNote:{'0-0':'[SYSTEM CHECK] synthetic note.'},
+    focus:[{area:'Cut precision',why:'[SYSTEM CHECK] synthetic focus area.'}],sum:{},cats,targets:{'0-0':'[SYSTEM CHECK] target text'}};
+  const ok2=await step('KPI: editor locks self-review',async()=>{
+    await api('/kpi/editor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+      id:caseId,editor:subj.name,level:subj.level,quarter:cycle,editor_data:editorData,self_overall:4,config_version:null
+    })});
+    return {detail:'Locked — ClickUp task should now read "· Awaiting supervisor"'};
+  });
+  if(!ok2) return;
+  const finalCategories=[{name:'1  Output Quality & Craft',self:4,spv:4,metrics:[{metric:'Pacing & rhythm',target:'[SYSTEM CHECK] target text',self:4,self_actual:'[SYSTEM CHECK] synthetic self-review entry.',self_note:'[SYSTEM CHECK] synthetic note.',spv:4,spv_note:'[SYSTEM CHECK] synthetic supervisor note.'}]}];
+  const finalFocus=[{area:'Cut precision',why:'[SYSTEM CHECK] synthetic focus area.',action:'[SYSTEM CHECK] agreed action.',measure:'[SYSTEM CHECK] measure.',priority:'Low',source:'editor'}];
+  await step('KPI: supervisor files to ClickUp',async()=>{
+    const j=await api('/kpi/finalize',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+      id:caseId,supervisor:'[SYSTEM CHECK]',official_kpi:4,categories:finalCategories,focus:finalFocus
+    })});
+    return {detail:'Filed — ClickUp task should now read "· Filed ✓" with a PDF attached',url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
+  });
+}
+
+/* ===== Peer Appraisal ===== */
+async function runPeer(){
+  const target=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
+  const raterA=ROSTER.find(r=>r.name===document.getElementById('raterASel').value);
+  const raterB=ROSTER.find(r=>r.name===document.getElementById('raterBSel').value);
+  const cycle=document.getElementById('cycleInp').value.trim();
+  if(!target||!raterA||!raterB){log('fail','Peer check','Pick a test subject and two different raters first.');return;}
+  if(raterA.name===raterB.name){log('fail','Peer check','Rater A and Rater B must be different people.');return;}
+  const ratings={};PEER_VALUES.forEach(v=>ratings[v]=4);
+  for(const rater of [raterA,raterB]){
+    let assignId=null,token=null;
+    const okA=await step(`Peer: assign ${rater.name} → rate ${target.name}`,async()=>{
+      const j=await api('/peer/assignments',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+        cycle,rater_name:rater.name,rater_id:rater.id,target_name:target.name,target_id:target.id
+      })});
+      assignId=j.id;
+      CREATED.push({kind:'peer',label:`Peer assignment (${rater.name}→${target.name})`,id:assignId});renderCreated();
+      return {detail:`Assignment ${assignId}`};
+    });
+    if(!okA) continue;
+    const okB=await step(`Peer: create task for ${rater.name}`,async()=>{
+      const j=await api('/peer/create-assignment-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:assignId})});
+      return {detail:`Task in ${rater.name}'s To-do list`,url:j.task_url};
+    });
+    if(!okB) continue;
+    await step(`Peer: fetch ${rater.name}'s personal token`,async()=>{
+      const j=await api(`/peer/rater-link?editor=${encodeURIComponent(rater.name)}`);
+      token=j.token;
+      return {detail:'Token resolved'};
+    });
+    if(!token) continue;
+    await step(`Peer: ${rater.name} submits rating for ${target.name}`,async()=>{
+      const j=await api('/submit/peer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+        cycle,target:target.name,target_id:target.id,target_level:target.level,ratings,
+        key_strength:'[SYSTEM CHECK] synthetic strength note.',constructive:'[SYSTEM CHECK] synthetic constructive note.',
+        overall:4,track_reco:target.level==='senior'?'ic':null,_token:token
+      })});
+      return {detail:j.aggregated?`Pooled — ${j.n} rater(s) in. A Peer Scorecard task should now exist for ${target.name}.`:`Recorded (${j.n} rater so far, needs 2 to pool).`,url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
+    });
+  }
+}
+
+/* ===== PIP ===== */
+async function runPip(){
+  const subj=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
+  if(!subj){log('fail','PIP check','Pick a test subject first.');return;}
+  let pipId=null;
+  const ok1=await step('PIP: reserve case',async()=>{
+    const j=await api('/pip/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:subj.name})});
+    pipId=j.case_id;
+    CREATED.push({kind:'pip',label:'PIP case',id:pipId});renderCreated();
+    return {detail:`Case ${pipId} — no ClickUp task yet, by design (nothing there until real content is saved)`};
+  });
+  if(!ok1||!pipId) return;
+  const today=new Date(),review=new Date(Date.now()+30*86400000);
+  const iso=d=>d.toISOString().slice(0,10);
+  const basePayload={
+    editor:subj.name,level:subj.level,managers:['[SYSTEM CHECK]'],severity:'Minor',duration_d:30,
+    start_date:iso(today),review_date:iso(review),
+    gaps:[{competency:'Brief adherence',score_now:2,score:4,met:true,target:'[SYSTEM CHECK] target text.',evidence:'[SYSTEM CHECK] synthetic evidence.'}],
+    actions:[{editor:'[SYSTEM CHECK] editor action.',company:'[SYSTEM CHECK] company support.',by:iso(review)}],
+    checkpoints:[{n:1,date:iso(today),on_track:'Yes',notes:'[SYSTEM CHECK] synthetic checkpoint note.'}]
+  };
+  const ok2=await step('PIP: first save (creates ClickUp task + PDF)',async()=>{
+    const j=await api(`/pip/${encodeURIComponent(pipId)}/update`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(basePayload)});
+    return {detail:'Task created with the full report PDF attached',url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
+  });
+  if(!ok2) return;
+  await step('PIP: file final verdict (re-attaches PDF)',async()=>{
+    const j=await api(`/pip/${encodeURIComponent(pipId)}/update`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+      ...basePayload,result:'Passed — off PIP',final_review_date:iso(review),
+      summary:'[SYSTEM CHECK] synthetic outcome summary.',verdict:'PASS',_finalize:true
+    })});
+    return {detail:'Filed — a fresh PDF should be attached and the task marked complete',url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
+  });
+}
+
+async function runAll(){
+  setRunning(true);
+  await runKpi();
+  await runPeer();
+  await runPip();
+  setRunning(false);
+}
+function setRunning(on){
+  ['runAllBtn','runKpiBtn','runPeerBtn','runPipBtn','cleanupBtn'].forEach(id=>document.getElementById(id).disabled=on);
+  if(!on) renderCreated();
+}
+
+/* ===== Cleanup ===== */
+async function cleanup(){
+  document.getElementById('cleanupBtn').disabled=true;
+  for(const c of CREATED){
+    if(c.deleted) continue;
+    await step(`Clean up: remove ${c.label} ${c.id}`,async()=>{
+      const path=c.kind==='kpi'?`/kpi/cases/${encodeURIComponent(c.id)}`:c.kind==='pip'?`/pip/cases/${encodeURIComponent(c.id)}`:`/peer/assignments/${encodeURIComponent(c.id)}`;
+      const j=await api(path,{method:'DELETE'});
+      c.deleted=true;
+      const bits=[];
+      if('clickup_deleted' in j) bits.push(j.clickup_deleted?'ClickUp ✓':'ClickUp task not found/already gone');
+      if('sheet_deleted' in j) bits.push(j.sheet_deleted?'Sheet ✓':'no Sheet row to remove');
+      return {detail:bits.join(' · ')||'Removed from Supabase'};
+    });
+  }
+  renderCreated();
+}
+
+function fillSelects(){
+  const opts='<option value="">Select…</option>'+ROSTER.map(r=>`<option>${r.name}</option>`).join('');
+  ['subjectSel','raterASel','raterBSel'].forEach(id=>document.getElementById(id).innerHTML=opts);
+  ['runAllBtn','runKpiBtn','runPeerBtn','runPipBtn'].forEach(id=>document.getElementById(id).disabled=false);
+}
+
+async function boot(){
+  try{
+    const cfg=await (await fetch(`${WORKER_URL}/config`)).json();
+    ROSTER=(cfg.roster||[]).map(r=>({id:r.id,name:r.name,level:r.level}));
+    fillSelects();
+    document.getElementById('appWrap').hidden=false;
+    document.getElementById('bootBanner').innerHTML='';
+  }catch(e){
+    document.getElementById('bootBanner').innerHTML='<div class="warn" style="margin-top:20px">Couldn’t reach the server — it may be waking up (first load can take ~10s). ('+e.message+') <button class="btn" onclick="boot()" style="margin-left:8px">Retry</button></div>';
+  }
+}
+document.getElementById('runAllBtn').addEventListener('click',()=>{setRunning(true);runAll();});
+document.getElementById('runKpiBtn').addEventListener('click',()=>{setRunning(true);runKpi().then(()=>setRunning(false));});
+document.getElementById('runPeerBtn').addEventListener('click',()=>{setRunning(true);runPeer().then(()=>setRunning(false));});
+document.getElementById('runPipBtn').addEventListener('click',()=>{setRunning(true);runPip().then(()=>setRunning(false));});
+document.getElementById('cleanupBtn').addEventListener('click',cleanup);
+boot();
+</script>
+</body>
+</html>
