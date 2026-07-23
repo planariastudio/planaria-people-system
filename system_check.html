@@ -67,7 +67,7 @@
       <b>Before you run this — read this once.</b> The people you pick below will get real ClickUp tasks assigned to them, which usually means a real ClickUp notification. This is not a sandbox.
       <ul>
         <li>Pick people who won't be confused by a "PIP" or "KPI" task briefly appearing on their name — yourself, if you're on the roster, is the safest choice for every role below.</li>
-        <li>The test quarter defaults to <b>Q4 2099</b> — deliberately outside any real cycle, so test cases are easy to spot and never mix with real quarterly data.</li>
+        <li>Each run auto-picks a fresh test quarter (<b>Q4 2090–2099</b>) — deliberately outside any real cycle, so cases are easy to spot, never mix with real data, and never collide with a previous run's leftovers.</li>
         <li>Every note/evidence field this tool writes is prefixed <b>"[SYSTEM CHECK]"</b> so it's unmistakable in ClickUp and Supabase.</li>
         <li>Use <b>Clean up</b> at the bottom when you're done — it deletes everything this run created from Supabase, ClickUp, and the Sheet, the same cascade the Remove buttons in links_admin.html use.</li>
       </ul>
@@ -81,7 +81,7 @@
         <div class="f"><label>Test subject (KPI + PIP + Peer target)</label><select id="subjectSel"><option value="">Select…</option></select></div>
         <div class="f"><label>Peer rater A</label><select id="raterASel"><option value="">Select…</option></select></div>
         <div class="f"><label>Peer rater B</label><select id="raterBSel"><option value="">Select…</option></select></div>
-        <div class="f" style="max-width:140px"><label>Test cycle</label><input id="cycleInp" value="Q4 2099"></div>
+        <div class="f" style="max-width:160px"><label>Last used cycle</label><input id="cycleInp" value="" readonly placeholder="auto, per run"></div>
       </div>
       <div class="btnrow">
         <button class="btn primary" id="runAllBtn" type="button" disabled>Run all checks</button>
@@ -166,11 +166,22 @@ function renderCreated(){
   document.getElementById('cleanupBtn').disabled=CREATED.every(c=>c.deleted);
 }
 
+// A fresh, obviously-fake quarter every run -- reusing the same test cycle
+// across runs (as happened in practice) leaves stale assignments/cases behind
+// that collide with the next run: KPI's "one self-review per quarter" guard
+// blocks a re-run outright, and Peer's assigned-pool count grows with every
+// leftover assignment, throwing off when the "final" pooled PDF should fire.
+// Range 2090-2099 stays unmistakably outside any real cycle.
+function freshCycle(){ return `Q4 ${2090+Math.floor(Math.random()*10)}`; }
+const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+
 /* ===== KPI ===== */
 async function runKpi(){
   const subj=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
-  const cycle=document.getElementById('cycleInp').value.trim();
+  const cycle=freshCycle();
+  document.getElementById('cycleInp').value=cycle;
   if(!subj){log('fail','KPI check','Pick a test subject first.');return;}
+  log('ok','KPI: using test cycle '+cycle);
   let caseId=null;
   const ok1=await step('KPI: create case + ClickUp task',async()=>{
     const j=await api('/kpi/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:subj.name,quarter:cycle})});
@@ -204,9 +215,11 @@ async function runPeer(){
   const target=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
   const raterA=ROSTER.find(r=>r.name===document.getElementById('raterASel').value);
   const raterB=ROSTER.find(r=>r.name===document.getElementById('raterBSel').value);
-  const cycle=document.getElementById('cycleInp').value.trim();
   if(!target||!raterA||!raterB){log('fail','Peer check','Pick a test subject and two different raters first.');return;}
   if(raterA.name===raterB.name){log('fail','Peer check','Rater A and Rater B must be different people.');return;}
+  const cycle=freshCycle();
+  document.getElementById('cycleInp').value=cycle;
+  log('ok','Peer: using test cycle '+cycle);
   const ratings={};PEER_VALUES.forEach(v=>ratings[v]=4);
   for(const rater of [raterA,raterB]){
     let assignId=null,token=null;
@@ -236,8 +249,12 @@ async function runPeer(){
         key_strength:'[SYSTEM CHECK] synthetic strength note.',constructive:'[SYSTEM CHECK] synthetic constructive note.',
         overall:4,track_reco:target.level==='senior'?'ic':null,_token:token
       })});
-      return {detail:j.aggregated?`Pooled — ${j.n} rater(s) in. A Peer Scorecard task should now exist for ${target.name}.`:`Recorded (${j.n} rater so far, needs 2 to pool).`,url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
+      const detail=!j.aggregated?`Recorded (${j.n} of ${j.assigned??'?'} rater(s) in — pools once 2 are in).`
+        :j.final?`FINAL — all ${j.assigned} assigned rater(s) are in. The final pooled PDF should be attached to ${target.name}'s Peer Scorecard task now.`
+        :`Pooled (${j.n} of ${j.assigned} rater(s) in) — task summary updated, final PDF attaches once everyone assigned has rated.`;
+      return {detail,url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
     });
+    if(rater===raterA) await wait(1500); // let ClickUp/Cloudflare settle before the next burst of calls
   }
 }
 
@@ -279,7 +296,9 @@ async function runPip(){
 async function runAll(){
   setRunning(true);
   await runKpi();
+  await wait(1500);
   await runPeer();
+  await wait(1500);
   await runPip();
   setRunning(false);
 }
