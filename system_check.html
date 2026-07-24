@@ -147,15 +147,26 @@ function logUpdate(row,status,title,detail,url){
   if(detail){ if(d) d.textContent=detail; else row.querySelector('.body').insertAdjacentHTML('beforeend',`<div class="d">${detail}</div>`); }
   if(url && !row.querySelector('a')) row.insertAdjacentHTML('beforeend',`<a href="${url}" target="_blank" rel="noopener">Open ↗</a>`);
 }
-async function step(title, fn){
+// Retries a step on its own when it hits a transient rate limit (ClickUp or
+// Cloudflare's PDF renderer under a burst of KPI+Peer+PIP calls) instead of
+// just reporting the failure and stopping -- the whole point of "run all
+// checks" is to reach a clean, fully-filed end state without you having to
+// notice a 429 and manually re-run. The worker already retries renderPdf
+// itself; this is the client-side backstop for everything else (and a safety
+// net if the worker's own retries still weren't enough).
+async function step(title, fn, tries=4){
   const row=log('run',title,'running…');
-  try{
-    const {detail,url}=await fn();
-    logUpdate(row,'ok',title,detail,url);
-    return true;
-  }catch(e){
-    logUpdate(row,'fail',title,e.message);
-    return false;
+  for(let i=0;i<tries;i++){
+    try{
+      const {detail,url}=await fn();
+      logUpdate(row,'ok',title,detail,url);
+      return true;
+    }catch(e){
+      const retryable=/rate limit|429/i.test(e.message)&&i<tries-1;
+      if(!retryable){ logUpdate(row,'fail',title,e.message); return false; }
+      logUpdate(row,'run',title,`Rate limited — retrying in a few seconds… (attempt ${i+2} of ${tries})`);
+      await wait(4000*(i+1));
+    }
   }
 }
 
@@ -284,6 +295,7 @@ async function runPip(){
     return {detail:'Task created with the full report PDF attached',url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
   });
   if(!ok2) return;
+  await wait(2500); // two PDF renders back to back is exactly what saturates the renderer
   await step('PIP: file final verdict (re-attaches PDF)',async()=>{
     const j=await api(`/pip/${encodeURIComponent(pipId)}/update`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       ...basePayload,result:'Passed — off PIP',final_review_date:iso(review),
