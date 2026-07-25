@@ -81,7 +81,12 @@
         <div class="f"><label>Test subject (KPI + PIP + Peer target)</label><select id="subjectSel"><option value="">Select…</option></select></div>
         <div class="f"><label>Peer rater A</label><select id="raterASel"><option value="">Select…</option></select></div>
         <div class="f"><label>Peer rater B</label><select id="raterBSel"><option value="">Select…</option></select></div>
-        <div class="f" style="max-width:160px"><label>Last used cycle</label><input id="cycleInp" value="" readonly placeholder="auto, per run"></div>
+        <div class="f" style="max-width:220px"><label>Last used cycle</label>
+          <div style="display:flex;gap:6px">
+            <input id="cycleInp" value="" readonly placeholder="auto, per run" style="flex:1;min-width:0">
+            <a id="openAdminLink" class="btn" href="#" target="_blank" rel="noopener" style="display:none;white-space:nowrap;text-decoration:none;padding:9px 12px;font-size:13px">Admin ↗</a>
+          </div>
+        </div>
       </div>
       <div class="btnrow">
         <button class="btn primary" id="runAllBtn" type="button" disabled>Run all checks</button>
@@ -108,6 +113,7 @@
     </div>
     <div class="btnrow">
       <button class="btn danger" id="cleanupBtn" type="button" disabled>Delete everything this session created</button>
+      <button class="btn" id="forgetBtn" type="button">Forget this list</button>
     </div>
   </div>
 </div>
@@ -120,6 +126,14 @@ const PAGES_BASE='https://planariastudio.github.io/planaria-people-system';
 const PEER_VALUES=["Growth Potential","Agility","Continuous Improvement","Teamwork","Knowledge Sharing","Conflict Resolution","Communication & Handoff","Visibility","Deep Dive","Accountability","Reliability & Deadlines","Fill-the-Gap Attitude","Quality of Work","Integrity","Earn Trust"];
 let ROSTER=[];
 const CREATED=[]; // {kind,label,id,extra}
+// Survives a refresh -- without this, reloading the page (or the tab crashing,
+// or just closing it) wiped the only record of what a run created, and Clean up
+// had nothing left to delete even though the real Supabase rows and ClickUp
+// tasks were still sitting there. Every renderCreated() call re-persists.
+function saveCreated(){ try{ localStorage.setItem('systemCheckCreated', JSON.stringify(CREATED)); }catch(e){} }
+(function restoreCreated(){
+  try{ const saved=JSON.parse(localStorage.getItem('systemCheckCreated')||'[]'); CREATED.push(...saved); }catch(e){}
+})();
 
 async function api(path,opt){
   const sep=path.includes('?')?'&':'?';
@@ -171,10 +185,22 @@ async function step(title, fn, tries=4){
 }
 
 function renderCreated(){
+  saveCreated();
   const tbody=document.getElementById('createdRows');
   if(!CREATED.length){tbody.innerHTML='<tr><td colspan="3" class="empty">Nothing created yet.</td></tr>';document.getElementById('cleanupBtn').disabled=true;return;}
   tbody.innerHTML=CREATED.map(c=>`<tr><td>${c.label}</td><td><span class="idtag">${c.id}</span></td><td>${c.deleted?'<span style="color:var(--hi);font-weight:650">Deleted ✓</span>':''}</td></tr>`).join('');
   document.getElementById('cleanupBtn').disabled=CREATED.every(c=>c.deleted);
+}
+function setCycle(cycle){
+  document.getElementById('cycleInp').value=cycle;
+  const a=document.getElementById('openAdminLink');
+  a.href='links_admin.html?cycle='+encodeURIComponent(cycle);
+  a.style.display='inline-block';
+}
+function forgetCreated(){
+  if(!confirm("Forget this list? This only clears the tracker on this page — it does NOT delete anything from Supabase or ClickUp. Use this if you've already cleaned up by hand."))return;
+  CREATED.length=0;
+  renderCreated();
 }
 
 // A fresh, obviously-fake quarter every run -- reusing the same test cycle
@@ -190,7 +216,7 @@ const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
 async function runKpi(){
   const subj=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
   const cycle=freshCycle();
-  document.getElementById('cycleInp').value=cycle;
+  setCycle(cycle);
   if(!subj){log('fail','KPI check','Pick a test subject first.');return;}
   log('ok','KPI: using test cycle '+cycle);
   let caseId=null;
@@ -229,7 +255,7 @@ async function runPeer(){
   if(!target||!raterA||!raterB){log('fail','Peer check','Pick a test subject and two different raters first.');return;}
   if(raterA.name===raterB.name){log('fail','Peer check','Rater A and Rater B must be different people.');return;}
   const cycle=freshCycle();
-  document.getElementById('cycleInp').value=cycle;
+  setCycle(cycle);
   log('ok','Peer: using test cycle '+cycle);
   const ratings={};PEER_VALUES.forEach(v=>ratings[v]=4);
   for(const rater of [raterA,raterB]){
@@ -372,6 +398,8 @@ document.getElementById('runKpiBtn').addEventListener('click',()=>{setRunning(tr
 document.getElementById('runPeerBtn').addEventListener('click',()=>{setRunning(true);runPeer().then(()=>setRunning(false));});
 document.getElementById('runPipBtn').addEventListener('click',()=>{setRunning(true);runPip().then(()=>setRunning(false));});
 document.getElementById('cleanupBtn').addEventListener('click',cleanup);
+document.getElementById('forgetBtn').addEventListener('click',forgetCreated);
+renderCreated(); // reflect anything restored from a previous session before boot() even resolves
 boot();
 </script>
 </body>
