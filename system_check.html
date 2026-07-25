@@ -263,6 +263,14 @@ async function runPeer(){
       const detail=!j.aggregated?`Recorded (${j.n} of ${j.assigned??'?'} rater(s) in — pools once 2 are in).`
         :j.final?`FINAL — all ${j.assigned} assigned rater(s) are in. The final pooled PDF should be attached to ${target.name}'s Peer Scorecard task now.`
         :`Pooled (${j.n} of ${j.assigned} rater(s) in) — task summary updated, final PDF attaches once everyone assigned has rated.`;
+      // The pooled Peer Scorecard (on the TARGET's list) is a separate ClickUp
+      // task from either rater's individual assignment task -- track it once,
+      // the first time pooling opens, so Clean up actually reaches it. There
+      // was previously no delete path for this at all (see /peer/scorecard).
+      if(j.aggregated && !CREATED.some(c=>c.kind==='peer_scorecard'&&c.target===target.name&&c.cycle===cycle)){
+        CREATED.push({kind:'peer_scorecard',label:`Peer Scorecard (pooled) for ${target.name}`,id:`${target.name} · ${cycle}`,target:target.name,cycle});
+        renderCreated();
+      }
       return {detail,url:j.clickup_task_id?`https://app.clickup.com/t/${j.clickup_task_id}`:null};
     });
     if(rater===raterA) await wait(1500); // let ClickUp/Cloudflare settle before the next burst of calls
@@ -325,12 +333,17 @@ async function cleanup(){
   for(const c of CREATED){
     if(c.deleted) continue;
     await step(`Clean up: remove ${c.label} ${c.id}`,async()=>{
-      const path=c.kind==='kpi'?`/kpi/cases/${encodeURIComponent(c.id)}`:c.kind==='pip'?`/pip/cases/${encodeURIComponent(c.id)}`:`/peer/assignments/${encodeURIComponent(c.id)}`;
+      const path=c.kind==='kpi'?`/kpi/cases/${encodeURIComponent(c.id)}`
+        :c.kind==='pip'?`/pip/cases/${encodeURIComponent(c.id)}`
+        :c.kind==='peer_scorecard'?`/peer/scorecard?target=${encodeURIComponent(c.target)}&cycle=${encodeURIComponent(c.cycle)}`
+        :`/peer/assignments/${encodeURIComponent(c.id)}`;
       const j=await api(path,{method:'DELETE'});
       c.deleted=true;
       const bits=[];
       if('clickup_deleted' in j) bits.push(j.clickup_deleted?'ClickUp ✓':'ClickUp task not found/already gone');
       if('sheet_deleted' in j) bits.push(j.sheet_deleted?'Sheet ✓':'no Sheet row to remove');
+      if('sheet_deleted_count' in j) bits.push(`Sheet ✓ (${j.sheet_deleted_count} row(s))`);
+      if('deleted_responses' in j) bits.push(`${j.deleted_responses} rating(s) removed`);
       return {detail:bits.join(' · ')||'Removed from Supabase'};
     });
   }

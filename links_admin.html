@@ -123,6 +123,16 @@
       </table>
       <div id="emptyMsg" class="empty" hidden>No assignments yet for this cycle.</div>
     </div>
+
+    <h2 style="margin-top:26px">Pooled scorecards</h2>
+    <p class="lede">The result <i>about</i> each person, once at least 2 raters have submitted — separate from the assignment rows above, which are just the planning. Same cycle as picked above.</p>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>Target</th><th>Raters in</th><th></th></tr></thead>
+        <tbody id="scorecardRows"></tbody>
+      </table>
+      <div id="scorecardEmpty" class="empty" hidden>No pooled scorecards yet for this cycle.</div>
+    </div>
   </div>
 
   <div class="section" style="--sa:var(--pip)">
@@ -360,8 +370,8 @@ async function boot(){
   document.getElementById('bootBanner').innerHTML='';
   if(!WIRED){
     WIRED=true;
-    document.getElementById('cQ').addEventListener('change',loadRows);
-    document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadRows();});
+    document.getElementById('cQ').addEventListener('change',()=>{loadRows();loadPeerScorecards();});
+    document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4){loadRows();loadPeerScorecards();}});
     document.getElementById('addBtn').addEventListener('click',addAssignment);
     document.getElementById('raterSel').addEventListener('change',refreshPairSelects);
     document.getElementById('targetSel').addEventListener('change',refreshPairSelects);
@@ -372,7 +382,7 @@ async function boot(){
     document.getElementById('cQ').value=q;document.getElementById('cY').value=y;
     document.getElementById('kQ').value=q;document.getElementById('kY').value=y;
   }
-  await Promise.all([loadAllLinks(),loadRows(),loadKpiTracker(),loadPipTracker()]);
+  await Promise.all([loadAllLinks(),loadRows(),loadPeerScorecards(),loadKpiTracker(),loadPipTracker()]);
 }
 
 async function loadRows(){
@@ -411,6 +421,33 @@ async function loadRows(){
       const j=await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'});
       tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';}
       if(j.clickup_deleted===false)alert('The assignment was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
+    }
+    catch(e){ alert('Failed to remove: '+e.message); }
+  }));
+}
+async function loadPeerScorecards(){
+  const cycle=currentCycle();
+  const tbody=document.getElementById('scorecardRows'),empty=document.getElementById('scorecardEmpty');
+  if(!cycle){tbody.innerHTML='';empty.hidden=false;empty.textContent='Pick a quarter and year.';return;}
+  tbody.innerHTML='<tr><td colspan="3" class="empty">Loading…</td></tr>';empty.hidden=true;
+  let data;
+  try{ data=await api(`/peer/scorecards?cycle=${encodeURIComponent(cycle)}`); }
+  catch(e){ tbody.innerHTML=`<tr><td colspan="3" class="empty">Failed to load: ${e.message}</td></tr>`; return; }
+  const rows=data.scorecards||[];
+  if(!rows.length){tbody.innerHTML='';empty.hidden=false;empty.textContent='No pooled scorecards yet for this cycle.';return;}
+  tbody.innerHTML=rows.map(s=>`
+    <tr data-target="${s.target}">
+      <td><b>${s.target}</b></td>
+      <td>${s.n}</td>
+      <td><button class="btn mini delBtn" type="button">Remove</button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.delBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const tr=b.closest('tr'),target=tr.dataset.target;
+    if(!confirm(`Remove ${target}'s pooled Peer Scorecard for ${cycle}?\n\nThis deletes the ClickUp scorecard task and every rater's submitted rating behind it (their individual assignment rows above are untouched, so it can be re-pooled from scratch if raters submit again). This does not affect any other cycle or any other person's scorecard.`))return;
+    try{
+      const j=await api(`/peer/scorecard?target=${encodeURIComponent(target)}&cycle=${encodeURIComponent(cycle)}`,{method:'DELETE'});
+      tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No pooled scorecards yet for this cycle.';}
+      if(j.clickup_deleted===false)alert('The scorecard was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
     }
     catch(e){ alert('Failed to remove: '+e.message); }
   }));
