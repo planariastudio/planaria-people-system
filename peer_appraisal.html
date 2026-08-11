@@ -133,6 +133,9 @@
   <button class="btn primary hidden" id="submitBtn" onclick="submitForm()" disabled>Preview &amp; submit</button>
 </div></div>
 
+<!-- keeps an in-progress rating alive across a refresh; nothing is saved
+     server-side until Submit -->
+<script src="draft.js"></script>
 <script>
 /* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
@@ -206,13 +209,65 @@ function buildClusterCards(){
 const tgt=document.getElementById('target');
 tgt.onchange=function(){var o=tgt.selectedOptions[0];var changed=state.target&&state.target!==tgt.value;state.target=tgt.value;state.target_id=o?o.dataset.slug:'';state.level=o?o.dataset.lvl:'';
   if(changed)resetRatings(); // never carry one peer's ratings into another's form
-  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span> <span class="guide" style="display:inline">&rarr; click <b>Next</b> to rate them across each value.</span>':'';paintAnchors();validate();};
+  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span> <span class="guide" style="display:inline">&rarr; click <b>Next</b> to rate them across each value.</span>':'';paintAnchors();validate();
+  restoreDraft(); // target is only known now, so this is the first point a draft can be matched
+};
 function resetRatings(){
   state.ratings={};state.track_reco=null;
   document.getElementById('key_strength').value='';document.getElementById('constructive').value='';
   document.getElementById('confirmAnon').checked=false;
   document.querySelectorAll('.sc.sel').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
   document.querySelectorAll('.trk-opt.sel').forEach(function(x){x.classList.remove('sel');});
+}
+
+/* ===== draft (see draft.js) =====
+   One draft per peer per cycle: a rater works through several people, and each
+   sitting is its own piece of work. Switching target must never surface the
+   previous peer's ratings, which is exactly what keying on target+cycle buys. */
+function draftKey(){
+  var who=state.target_id||state.target;
+  return (who&&state.cycle)?('peer.'+who+'.'+state.cycle):'';
+}
+function draftSnapshot(){
+  return {ratings:Object.assign({},state.ratings),track_reco:state.track_reco,cur:cur,
+    key_strength:document.getElementById('key_strength').value,
+    constructive:document.getElementById('constructive').value};
+}
+var saveDraft=window.DRAFT?DRAFT.writer(draftKey,draftSnapshot):function(){};
+function clearDraft(){if(window.DRAFT)DRAFT.clear(draftKey());}
+/* The 1-5 buttons carry their selected look in classes and inline styles set by
+   the click handler, not re-derived from state on paint -- so restoring the
+   numbers alone would leave every button looking unpicked. Replay the visual. */
+function paintRatings(){
+  document.querySelectorAll('.sc').forEach(function(b){
+    var n=state.ratings[b.dataset.v],on=n===+b.dataset.n;
+    b.classList.toggle('sel',on);b.setAttribute('aria-pressed',on?'true':'false');
+    b.style.background=on?(n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)'):'';
+    b.style.color=on?(n===3?'#3d2c00':'#fff'):'';
+  });
+  document.querySelectorAll('.trk-opt').forEach(function(x){x.classList.toggle('sel',x.dataset.trk===state.track_reco);});
+}
+function restoreDraft(){
+  if(!window.DRAFT)return;
+  var k=draftKey();if(!k)return;
+  var d=DRAFT.load(k);if(!d)return;
+  state.ratings=d.ratings||{};state.track_reco=d.track_reco||null;
+  document.getElementById('key_strength').value=d.key_strength||'';
+  document.getElementById('constructive').value=d.constructive||'';
+  paintRatings();
+  cur=Math.max(0,Math.min(STEPS.length-1,+d.cur||0));
+  paintAnchors();paint();validate();
+  var el=document.getElementById('tnote');
+  if(el)el.innerHTML='<b>Picked up where you left off</b> — restored your unsaved answers for '+
+    state.target+' from '+DRAFT.ago(DRAFT.savedAt(k))+'. Nothing is submitted yet. '+
+    '<a href="#" id="draftDiscard">Start this one over</a>.';
+  var a=document.getElementById('draftDiscard');
+  if(a)a.addEventListener('click',function(e){
+    e.preventDefault();
+    if(!confirm('Throw away the restored answers for '+state.target+' and start over?'))return;
+    clearDraft();resetRatings();cur=0;paintAnchors();paint();validate();
+    var n=document.getElementById('tnote');if(n)n.innerHTML='';
+  });
 }
 var _cyQ=document.getElementById('cycleQ'),_cyY=document.getElementById('cycleY'),_cyH=document.getElementById('cycle');
 function _composeCycle(){state.cycle=(_cyQ.value&&_cyY.value.length===4)?(_cyQ.value+' '+_cyY.value):'';_cyH.value=state.cycle;validate();}
@@ -353,10 +408,12 @@ document.addEventListener('click',function(e){
   var b=e.target.closest('.sc');if(!b)return;
   var val=b.dataset.v,n=+b.dataset.n;state.ratings[val]=n;
   var grp=b.parentElement;grp.querySelectorAll('.sc').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
-  b.classList.add('sel');b.setAttribute('aria-pressed','true');b.style.background=n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)';b.style.color=n===3?'#3d2c00':'#fff';validate();
+  b.classList.add('sel');b.setAttribute('aria-pressed','true');b.style.background=n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)';b.style.color=n===3?'#3d2c00':'#fff';validate();saveDraft();
 });
+// textareas and the track pills; the ratings above save from their own handler
+document.addEventListener('input',function(e){if(e.target.closest('#key_strength,#constructive'))saveDraft();});
 
-function go(dir){if(dir>0&&!canLeave(cur))return;cur=Math.max(0,Math.min(STEPS.length-1,cur+dir));paint();}
+function go(dir){if(dir>0&&!canLeave(cur))return;cur=Math.max(0,Math.min(STEPS.length-1,cur+dir));paint();saveDraft();}
 function paint(){
   document.querySelectorAll('.step').forEach(function(s){s.classList.remove('on');});
   document.querySelector('.step[data-step="'+STEPS[cur]+'"]').classList.add('on');
@@ -434,6 +491,7 @@ async function submitForm(){
     const r=await fetch(`${WORKER_URL}/submit/peer`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload())});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||r.status);
+    clearDraft(); // submitted and pooled; the draft can only be noise from here
     showDone(j);
   } catch(e){
     SUBMITTING=false;btn.disabled=false;btn.textContent='Preview & submit';
@@ -459,7 +517,7 @@ function showDone(j){
     loadAssignments(); // the peer just rated is now done -- re-narrow to who's left
   };
 }
-document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});
+document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');saveDraft();});
 function bootBanner(msg){
   var b=document.getElementById('bootBanner');
   if(!b){b=document.createElement('div');b.id='bootBanner';b.style.cssText='margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;color:#7c4a06;border-radius:10px;font-size:13px;line-height:1.5;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap';document.querySelector('.wrap').prepend(b);}

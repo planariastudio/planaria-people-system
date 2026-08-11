@@ -87,6 +87,7 @@ tool; first thing to replace at growth (see §13, Phase 3).
 /peer_growth_view.html              — live pooled peer result view
 /pip.html                           — PIP working document
 /kpi_card.js, /peer_card.js         — shared render+CSS modules (browser + worker keep synced copies)
+/draft.js                           — localStorage draft store for the KPI + peer forms (see §7)
 /people_system_guide.html           — early text-only "team guide" draft, superseded by the two guide repos in §15
 /people_system_reference.html       — auto-rendered rubric reference (all 3 instruments, all 6 levels)
 /scripts/generate_rater_tokens.py   — assigns peer_token to roster, run manually
@@ -214,6 +215,20 @@ via config, not hardcoded.
   `return=minimal` made a genuine delete and a zero-match delete (e.g. blocked
   by RLS) produce byte-identical HTTP responses. If you touch delete logic
   again, keep this: check the row count, don't trust `res.ok` alone.
+- **Form drafts: local for KPI + peer, guard for PIP — the split is deliberate.**
+  `kpi_scorecard.html` and `peer_appraisal.html` write nothing server-side until
+  their single final submit (`/kpi/editor`, `/kpi/finalize`, `/submit/peer`), so
+  a refresh used to bin the whole sitting. Both now snapshot to localStorage via
+  `draft.js` as you type and offer it back on return. `pip.html` is the opposite
+  — "Save progress" already persists the whole case to `/pip/:id/update` and
+  `loadCase()` reads it all back — so it gets a `beforeunload` dirty-guard
+  instead. **Do not give PIP a local draft**: it would race the server record and
+  could replay an older sitting over a newer save. Rules that must hold:
+  keys are per case *and* per stage (`kpi.supervisor.<id>`, `kpi.editor.<id>`,
+  `peer.<target>.<cycle>`) so two people on one machine can't inherit each
+  other's work; a draft is **offered with a banner and a discard link**, never
+  applied silently; it is cleared on successful submit; and every call is
+  try/catch'd so blocked storage degrades to exactly the old behaviour.
 
 ## 8. ClickUp structure & the personal-link model
 
