@@ -718,6 +718,13 @@ function buildFinalCategories(){
     return{name:c.name,metrics,self:selfAvg.length?+(selfAvg.reduce((a,b)=>a+b)/selfAvg.length).toFixed(2):null,spv:spvAvg.length?+(spvAvg.reduce((a,b)=>a+b)/spvAvg.length).toFixed(2):null};
   });
 }
+// The supervisor's written assessment (SPV_ROWS -- all three required by validate()).
+// Sent as ordered {label,text} pairs rather than the raw s0/s1/s2 keys so the card
+// renders the labels that were in force when the case was filed: renaming a row
+// later never relabels an assessment already on record.
+function buildFinalSummary(){
+  return SPV_ROWS.map((label,i)=>({label,text:(SP.sum['s'+i]||'').trim()})).filter(r=>r.text);
+}
 function buildFinalFocus(){
   const fromEditor=ED.focus.map((f,i)=>{const s=SP.foc[i]||{};return{area:f.area,why:f.why,action:s.action||'',measure:s.measure||'',priority:s.priority||'',source:'editor'};});
   const fromSpv=SP.extraFocus.filter(f=>f.area).map(f=>({area:f.area,why:f.why||'',action:f.action||'',measure:f.measure||'',priority:f.priority||'',source:'supervisor'}));
@@ -731,13 +738,13 @@ function buildPreviewPayload(){
     level:LEVEL_LABEL[ED.level]||ED.level||'',
     quarter:ED.quarter||$('quarter').value||'',
     supervisor:'Supervisor',official_kpi:overall('spv'),self_overall:overall('self'),
-    categories:buildFinalCategories(),focus:buildFinalFocus()};
+    categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
 }
 async function fileFinal(){
   if(!confirm(`File the KPI result for ${ED.editor}?\n\nThis creates the ClickUp report PDF and closes the case.`))return;
   const b=$('rFile');b.disabled=true;b.textContent='Filing…';
   const payload={id:caseId,supervisor:'Supervisor',official_kpi:overall('spv'),
-    categories:buildFinalCategories(),focus:buildFinalFocus()};
+    categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
   try{
     const r=await fetch(`${WORKER_URL}/kpi/finalize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));

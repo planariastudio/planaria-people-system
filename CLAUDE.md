@@ -92,6 +92,7 @@ tool; first thing to replace at growth (see §13, Phase 3).
 /scripts/generate_rater_tokens.py   — assigns peer_token to roster, run manually
 /scripts/config_editor_Code.gs      — Apps Script, lives IN the Google Sheet
 /scripts/sheet_mirror_v2_Code.gs    — Apps Script, lives IN the Google Sheet
+/CLICKUP_AUTOMATIONS.md             — runbook for the ClickUp-side notification automations (no code, built in ClickUp's UI)
 /scripts/check.mjs                  — repo-wide syntax gate (correct ESM check for the worker)
 /tests/                             — node:test regression coverage (run via `npm test`)
 /wrangler.toml, /package.json       — Phase 1 scaffolding (see §13); wrangler deploy not yet used for a real deploy
@@ -314,7 +315,8 @@ Two related bugs, both found via the same real bug report:
 2. **Editor**: opens link from ClickUp → identity auto-resolved, level auto-set, quarter/year auto-default to "now" (editable) → scores each metric 1–5 with "actual" evidence + notes → names a focus area → written reflection → **Lock** (final for their side; one submission per quarter, enforced client + server).
 3. **Supervisor**: opens `kpi_scorecard.html` directly (no link — a bare visit always means supervisor, editors only ever arrive via their own link) → password gate → picks editor+quarter (case only loads once the editor's self-review is locked) → sees editor's answers read-only beside their own scoring panels → responds to focus areas → written assessment → last step shows the **actual result card preview** → **File to ClickUp**. Up to 3 supervisors can score independently; official score is the mean.
 4. Filing: renders PDF, renames the task to `Filed ✓`, attaches PDF, creates focus subtasks, marks `kpi_case.finalized`, pushes a row to the Sheet, lands on `kpi_result_card.html?kpi=<id>`.
-5. Result card shows: official KPI + band, calibration gap (self vs official), per-metric blocks with **what was expected (level target) → self actual/notes → supervisor note**, focus areas. Same layout web + PDF (shared module `kpi_card.js`; worker keeps a synced copy `kpiResultCardHtml`).
+5. Result card shows: official KPI + band, calibration gap (self vs official), per-metric blocks with **what was expected (level target) → self actual/notes → supervisor note**, the **supervisor's written assessment** (Strengths / Areas of improvement / Trajectory & recommendation), focus areas. Same layout web + PDF (shared module `kpi_card.js`; worker keeps a synced copy `kpiResultCardHtml`).
+   - The assessment travels as `spv_summary`: ordered `{label,text}` pairs built by `buildFinalSummary()`, sent by **both** `fileFinal()` and `buildPreviewPayload()`, persisted in `kpi_case.detail` and mirrored to the Sheet. Labels are snapshotted per case, so renaming a `SPV_ROWS` row never relabels an assessment already on record. The section is **omitted entirely** when empty — cases filed before 2026-07-30 have no `spv_summary` and must not show an empty block.
 
 ### Peer Appraisal (quarterly) — see §8 for the 2026-07-22 redesign
 1. **Admin**: set cycle → add assignments (who rates whom) → per-row **"Add task"** — one ClickUp task per pairing, pre-scoped link, no dropdown for the rater.
@@ -370,7 +372,7 @@ that silently merges two concurrent creates into one row.
 
 1. **Assignee mismatch is silent** — if someone's ClickUp display name/email-prefix doesn't match their roster name, their tasks are created unassigned. Planned fix: `roster.clickup_username` override column (not built).
 2. **Peer ratings aren't restricted to assignments server-side** — the form guides raters to assigned targets, but the API accepts a rating for anyone (except self). Deliberate so far.
-3. **Status = task-name suffix**, not real ClickUp statuses (real statuses are also set best-effort, but the suffix is the guaranteed source of truth). If DM automations are wanted, they key off real statuses — revisit then.
+3. **Status = task-name suffix**, not real ClickUp statuses (real statuses are also set best-effort, but the suffix is the guaranteed source of truth). Notification automations key off the real statuses, so they inherit that best-effort-ness — see `CLICKUP_AUTOMATIONS.md`. The single biggest gotcha there: `clickupSetStatus()` matches by case-insensitive substring, so a Space whose closing status is named **"Closed"** never matches `"complete"` and every filing/closing automation silently never fires.
 4. **Duplicate legacy tasks** may still exist in ClickUp from before the button-persistence fix (pre-2026-07-19) — clean up by hand if found.
 5. **`MIN_N = 2`** raters before any pooled peer data is visible (confidentiality floor, deliberate).
 6. Supervisor password (`Planaria-admin`) and admin key are client-side constants by design — URLs are unlisted; the Worker enforces the real gate.
@@ -419,7 +421,7 @@ Several things that look wrong were rational under the original constraint
 | Decision | Verdict |
 |---|---|
 | Worker as single choke point; static pages | **Good.** Keep forever. |
-| ClickUp status via task-name suffix | **Good under constraint** — revisit when DM automations are specified. |
+| ClickUp status via task-name suffix | **Good under constraint.** Real statuses are set too, best-effort — enough to hang notification automations off (`CLICKUP_AUTOMATIONS.md`), with the caveat that a silently-unmatched status means a silently-unsent notification. |
 | Sheet as config master | **Good** for non-technical rubric editing; wrong the day two people edit at once. |
 | Capability-URL identity (`peer_token`) | **Acceptable** internally; document that link = identity, rotate on leak. |
 | Vendored puppeteer in-source | **Bad** — artifact of paste-deploy, falls out for free with Phase 1b. |

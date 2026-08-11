@@ -213,9 +213,15 @@ function freshCycle(){ return `Q4 ${2090+Math.floor(Math.random()*10)}`; }
 const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
 
 /* ===== KPI ===== */
-async function runKpi(){
+// cycle can be passed in so runAll() can share ONE cycle across KPI + Peer --
+// each generating its own random cycle independently meant a KPI case could
+// land on Q4 2097 while the Peer scorecard from the same run landed on Q4
+// 2099, so the admin portal could never show both under one cycle picker and
+// the single "last used cycle" deep link only ever pointed at whichever ran
+// last. Standalone "Run KPI only" still gets its own fresh cycle.
+async function runKpi(cycle){
   const subj=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
-  const cycle=freshCycle();
+  if(!cycle) cycle=freshCycle();
   setCycle(cycle);
   if(!subj){log('fail','KPI check','Pick a test subject first.');return;}
   log('ok','KPI: using test cycle '+cycle);
@@ -248,13 +254,13 @@ async function runKpi(){
 }
 
 /* ===== Peer Appraisal ===== */
-async function runPeer(){
+async function runPeer(cycle){
   const target=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
   const raterA=ROSTER.find(r=>r.name===document.getElementById('raterASel').value);
   const raterB=ROSTER.find(r=>r.name===document.getElementById('raterBSel').value);
   if(!target||!raterA||!raterB){log('fail','Peer check','Pick a test subject and two different raters first.');return;}
   if(raterA.name===raterB.name){log('fail','Peer check','Rater A and Rater B must be different people.');return;}
-  const cycle=freshCycle();
+  if(!cycle) cycle=freshCycle();
   setCycle(cycle);
   log('ok','Peer: using test cycle '+cycle);
   const ratings={};PEER_VALUES.forEach(v=>ratings[v]=4);
@@ -307,12 +313,17 @@ async function runPeer(){
 async function runPip(){
   const subj=ROSTER.find(r=>r.name===document.getElementById('subjectSel').value);
   if(!subj){log('fail','PIP check','Pick a test subject first.');return;}
+  // PIP has no real quarter field -- its case id's quarter tag is normally just
+  // today's real date, which made a test case indistinguishable from a real one
+  // in the tracker (unlike KPI/Peer, whose ids carry the obviously-fake test
+  // cycle). quarter_override fixes that -- same fake-year convention as freshCycle.
+  const pipCycle=freshCycle();
   let pipId=null;
   const ok1=await step('PIP: reserve case',async()=>{
-    const j=await api('/pip/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:subj.name})});
+    const j=await api('/pip/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({editor_name:subj.name,quarter_override:pipCycle})});
     pipId=j.case_id;
     CREATED.push({kind:'pip',label:'PIP case',id:pipId});renderCreated();
-    return {detail:`Case ${pipId} — no ClickUp task yet, by design (nothing there until real content is saved)`};
+    return {detail:`Case ${pipId} (tagged ${pipCycle}) — no ClickUp task yet, by design (nothing there until real content is saved)`};
   });
   if(!ok1||!pipId) return;
   const today=new Date(),review=new Date(Date.now()+30*86400000);
@@ -341,9 +352,10 @@ async function runPip(){
 
 async function runAll(){
   setRunning(true);
-  await runKpi();
+  const cycle=freshCycle(); // one shared cycle for KPI + Peer, so the admin portal shows both under the same picker
+  await runKpi(cycle);
   await wait(1500);
-  await runPeer();
+  await runPeer(cycle);
   await wait(1500);
   await runPip();
   setRunning(false);
