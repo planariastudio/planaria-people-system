@@ -197,8 +197,38 @@ done better by the task type.
 Task type ids, live: `GA1PXC` KPI Scorecard, `6ImHbH` Peer Appraisal, `iyETVe` PIP. The
 bridge resolves them by name with a per-isolate cache, so a rename does not break it.
 
-GoodDay ids in use: People workspace `6kRwYR`, Team project `JORtmi`, Hiring `r7sNsK`,
-Leadership `tL8QO9`, Workbench `P1jWSq`, Business `A9VqHe`.
+GoodDay ids in use: People workspace `6kRwYR`, **Performance Records** `JORtmi` (renamed
+from "Team" on 2026-09-19), Hiring `r7sNsK`, Leadership `tL8QO9`, Workbench `P1jWSq`,
+Business `A9VqHe`, People System Admin `ZsX0ML`.
+
+### The admin portal is embedded in GoodDay
+
+`Leadership > People System Admin > Admin portal`, at
+`https://www.goodday.work/p/ZsX0ML/embed/4wpf`. A Link/Embed View pointing at
+`links_admin.html` on Pages, so the leads reach it from inside GoodDay rather than a
+bookmark. Access is "Public", which here means everyone with access to that project, and
+Leadership has three users. There is no Views API, so it was built in the UI.
+
+**Before widening access to it any further, read this.** `links_admin.html` carries its
+admin key in the page source:
+
+```
+const KEY='Planaria-admin'
+```
+
+and that page is served publicly from GitHub Pages (HTTP 200, no auth) out of a **public**
+repo, so the key is readable at `raw.githubusercontent.com` too. `CLAUDE.md` records this
+as a deliberate speed bump whose real protection is that the URL is unlisted. That premise
+no longer holds: a public repo lists it.
+
+What it opens is not cosmetic. `/peer/rater-links` returns every person's `peer_token`, and
+those tokens are identity, so holding one lets someone open that person's KPI form or
+submit peer ratings as them. Roster edits and case deletes are behind the same key.
+
+The embed does not make this worse, it is equally exposed today. The smallest real fix is
+to have the page prompt for the key once and keep it in `localStorage`, then rotate
+`PEER_ADMIN_KEY`. That takes the secret out of a public file without changing the Worker's
+auth model or breaking Pages.
 
 ---
 
