@@ -80,6 +80,7 @@ tool; first thing to replace at growth (see §13, Phase 3).
 
 ```
 /worker/index.js                    — Cloudflare Worker, all routes + PDF templates
+/worker/goodday.js                  — GoodDay integration layer (NOT wired up yet, see §15)
 /links_admin.html                   — admin portal (unlisted URL)
 /kpi_scorecard.html                 — editor + supervisor KPI form
 /kpi_result_card.html               — filed KPI result (standalone view)
@@ -551,3 +552,60 @@ remotes exist for them — see §15.
 2. Re-run `/selftest` from `links_admin.html` after deploy to confirm green across the board.
 3. If the user wants the two guide sites live: help them create the two empty GitHub repos (or get explicit sign-off to do it via the API path that got blocked), then push.
 4. Phase 1b (module split, `common.js` extraction, template-inlining build step) is the next real architecture investment when there's appetite for it — see §13. Not urgent at current scale.
+
+---
+
+## 15. GoodDay integration layer (`worker/goodday.js`)
+
+Added 2026-09-19. **Nothing calls it yet.** It exists so the ClickUp-to-GoodDay
+switch can be made one call site at a time instead of in one commit.
+
+Every function mirrors a `clickup*` one in `index.js`: same argument order, same
+return shape, and **the same error contract**, which is the part that matters:
+
+| Kind | Behaviour | Functions |
+|---|---|---|
+| Must abort the save | **throws** | create task, upload/attach, create project |
+| Advisory | returns **boolean**, swallows errors | comment, delete, set status, set custom fields |
+| Update | returns parsed body or **null**, never throws | `goodDayUpdateTask` |
+
+If you "tidy" the advisory ones into throwing, a failed progress comment starts
+aborting a filed KPI. That contract is deliberate — see the `clickupComment`
+comment in `index.js` for the original reasoning.
+
+**Three ClickUp helpers are deliberately not ported.** `clickupCreateTask` is dead
+code (zero call sites). `clickupAddTaskToList` / `clickupRemoveTaskFromList`
+become unnecessary because GoodDay's `toUserId` puts a task in that person's
+**My Work** natively — no per-person To-do list, no Tasks-in-Multiple-Lists
+ClickApp, and `clickup_map.todo_list_id` (9 references) goes with them.
+
+**Two things differ on purpose:**
+
+1. **`GOODDAY_BOT_USER_ID` is not optional.** GoodDay requires `fromUserId` on
+   every create and `userId` on status changes and comments. ClickUp inferred the
+   actor from the token. Pick a real user or a service account once.
+2. **PDFs attach to a comment, not the task.** This is an improvement, not a
+   workaround: ClickUp could not replace an attachment, which is why §2 restricts
+   PDFs to "meaning-changing snapshots". That restriction can be lifted once this
+   is live, because every render can be its own dated comment.
+
+**Env it needs** (all via `wrangler secret put`, never in the repo):
+`GOODDAY_TOKEN`, `GOODDAY_BOT_USER_ID`, `GOODDAY_PEOPLE_ID`,
+`GOODDAY_PROJECT_TEMPLATE_ID` (optional).
+
+**Tests:** `tests/goodday-helpers.test.mjs`, 21 tests, no network. They assert on
+the request that *would* have gone out, because the thing most likely to be wrong
+in an integration layer is the payload shape, not the plumbing.
+
+**Provisioning:** `scripts/provision_goodday_people.mjs` builds `Team` and one
+project per person under the People workspace. It reads the roster from the live
+`/config` so it cannot drift from what the forms use, runs dry by default, and
+re-reads afterwards to prove it made no duplicates. GoodDay will happily create a
+second project with the same name, so the get-or-create lookup is not an
+optimisation — it is what stops a retried run leaving two.
+
+**Still unverified.** Every endpoint in this module comes from GoodDay's published
+docs and has not been called. Before wiring anything up, prove: PDF attach end to
+end, whether an assigned task reaches My Work without project membership, custom
+field writes, sub-project creation, and the API rate limits.
+
