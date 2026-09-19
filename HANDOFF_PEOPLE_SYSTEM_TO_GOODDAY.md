@@ -13,8 +13,11 @@ below the session log is reference material that has not changed in a while.
 
 ## CURRENT STATE
 
-The Worker can file to GoodDay instead of ClickUp. It is committed, tested against the live
-GoodDay API, **not deployed**, and the switch is **off**.
+The Worker can file to GoodDay instead of ClickUp. It is **deployed** as of 19 September 2026,
+pushed to `main`, and the switch is **off**, so every task operation still goes to ClickUp.
+
+Flipping `GOODDAY_ENABLED` is still gated on invites, not on code. See "Before flipping the
+flag" below, which has not changed.
 
 ### The switch
 
@@ -52,9 +55,14 @@ of that back in play. Rewriting the six helpers underneath them puts none of it 
 to see which login and account id are active. (Not written down here: this repo is
 public, and whoever picks this up has dashboard access anyway.)
 
-The live worker `planaria-people-worker` was last deployed **11 August 2026** by dashboard
-paste. Everything committed since then is ahead of production. A deploy now carries a month
-of accumulated work, not only the GoodDay switch.
+The live worker `planaria-people-worker` was deployed **19 September 2026** with
+`npm run deploy`, and `main` now matches. The month of accumulated work that used to sit
+ahead of production has shipped.
+
+**Anything the worker reads from `env` must be a secret or declared in `[vars]`.** There is no
+third option that survives a deploy. `wrangler secret list` is the authority on which is
+which; the comments are not, and were wrong until today. `SUPABASE_URL` and
+`CLICKUP_SPACE_ID` are secrets now. See the outage below for what happens otherwise.
 
 Verified before deploying:
 
@@ -300,7 +308,59 @@ Still open:
 
 ## Session log
 
-**2026-09-19, this session. Built the GoodDay dispatch layer.**
+**2026-09-19, later. Shipped it, and broke production twice on the way.**
+
+Both outages were self-inflicted and both are worth knowing about, because the mechanisms
+are still there.
+
+**One: a deploy wiped the environment variables.** `wrangler deploy` replaces the worker's
+config with what `wrangler.toml` declares, and it declared no `[vars]`. `SUPABASE_URL` and
+`CLICKUP_SPACE_ID` were dashboard variables, not secrets, despite a comment here saying
+otherwise. Both vanished, every Supabase call became `Invalid URL: undefined/rest/v1/...`,
+and `/config` died, which takes every form with it. Recovered by reading the old values out
+of Cloudflare's version history, which keeps the bindings of every past version:
+
+```
+npx wrangler versions view 26224d88-700d-4ecf-8e21-03ab7fd3f37d
+```
+
+Both are secrets now, so a deploy cannot reach them.
+
+**Two: a config sync emptied the roster table.** `sbReplaceAll` deletes every row and then
+inserts, in two separate calls with nothing transactional between them. A change to preserve
+`peer_token` across syncs added that key only to people who already had one, so the batch
+held two object shapes, and PostgREST refuses those whole with `PGRST102 "All object keys
+must match"`. The delete had already run. Roster: empty.
+
+Fixed at both levels: the key is always present and null when absent, and `sbReplaceAll` now
+squares ragged rows against the union of their keys **before** deleting, so a caller's
+mistake costs an error instead of a table.
+
+**The peer tokens did not survive it.** They were the thing the change existed to protect.
+Every `?e=` and `?t=` link already sitting in a task description is dead, and the replacements
+are different tokens, so the links have to be re-issued from `links_admin.html`. Preservation
+works correctly from here.
+
+**Also fixed, and the reason the sync could run at all:** `Config_Levels` had `Senior`, `Jr`,
+`Associate` in its key column where everything else uses `senior`, `jr`, `assoc`. The
+validator took its vocabulary from that tab, so every roster row reported an invalid level,
+and because `LEVEL_LABELS` is rebuilt from the same column, every row of all three rubrics
+reported "no bullet text in ANY level column" while the bullets sat right there. Thirty-plus
+errors, none of them true, from one cosmetic cell in a tab nothing reads.
+
+`scripts/config_editor_Code.gs` now normalises instead of refusing: casing and the usual
+aliases resolve to the canonical key, validation checks `LEVEL_KEYS` rather than the
+spreadsheet, and `readRubric_` finds a level column by label, then key, then any header that
+names that level however it is spelled. It normalises on the way out too, so the live
+`levels` table repaired itself on the next sync. Both `.gs` files are in the syntax gate now;
+they never were, and a broken one silently kills the whole Planaria menu.
+
+**Lesson worth keeping.** Both outages came from shipping a change to a destructive path
+without being able to exercise it first. The order should have been: make `sbReplaceAll`
+safe, then add token preservation on top. Doing it the other way round is what turned a
+six-line improvement into an outage.
+
+**2026-09-19, earlier. Built the GoodDay dispatch layer.**
 
 Joshua's report was that the form still said "File to ClickUp" and still went through
 ClickUp. Both halves were true and both are fixed.
