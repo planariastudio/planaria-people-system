@@ -21995,8 +21995,26 @@ async function handleConfigSync(env, body) {
   }
   const report = {};
   if (Array.isArray(body.roster)) {
-    await sbReplaceAll(env, "roster", body.roster.map((r) => ({ id: r.id, name: r.name, level: r.level, track: r.track || null, active: r.active !== false })), "id");
+    // Carry peer_token across the sync. sbReplaceAll is a hard DELETE + INSERT,
+    // and the insert shape below has no peer_token column -- so every config sync
+    // used to blank every token in the roster. Tokens are permanent by design
+    // (CLAUDE.md §8: "Links are not rotated per quarter") and they live inside
+    // task descriptions people click through from, so a wipe is invisible until
+    // someone opens a dead link and cannot fill in their own review.
+    // Re-keyed on id, which is also what sbReplaceAll dedupes on.
+    // Read first and let a failure throw: syncing without the tokens is exactly
+    // the data loss this guards, so refusing beats a silent half-sync.
+    const priorTokens = {};
+    for (const r of await sbSelect(env, "roster", "?select=id,peer_token")) {
+      if (r.peer_token) priorTokens[r.id] = r.peer_token;
+    }
+    await sbReplaceAll(env, "roster", body.roster.map((r) => {
+      const row = { id: r.id, name: r.name, level: r.level, track: r.track || null, active: r.active !== false };
+      if (priorTokens[r.id]) row.peer_token = priorTokens[r.id];
+      return row;
+    }), "id");
     report.roster = body.roster.length;
+    report.tokens_preserved = body.roster.filter((r) => priorTokens[r.id]).length;
   }
   if (Array.isArray(body.levels)) {
     await sbReplaceAll(env, "levels", body.levels.map((l) => ({ key: l.key, label: l.label, sort_order: l.sort_order })), "key");
