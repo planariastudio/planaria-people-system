@@ -21969,6 +21969,16 @@ async function handlePipUpdate(env, pipId, body) {
 }
 __name(handlePipUpdate, "handlePipUpdate");
 async function sbReplaceAll(env, table, rows, pkCol) {
+  // Every object in a PostgREST bulk insert must carry identical keys, or the
+  // whole call fails with PGRST102 "All object keys must match". That failure
+  // lands AFTER the delete below, which empties the table and keeps nothing --
+  // it wiped the live roster on 2026-09-19. Square the rows off first, filling
+  // absent keys with null, and do it before deleting anything so a caller
+  // passing ragged rows costs an error rather than the table.
+  if (rows.length) {
+    const allKeys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+    rows = rows.map((r) => Object.fromEntries(allKeys.map((k) => [k, r[k] === void 0 ? null : r[k]])));
+  }
   await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?${pkCol}=not.is.null`, {
     method: "DELETE",
     headers: sbHeaders(env)
@@ -22008,11 +22018,14 @@ async function handleConfigSync(env, body) {
     for (const r of await sbSelect(env, "roster", "?select=id,peer_token")) {
       if (r.peer_token) priorTokens[r.id] = r.peer_token;
     }
-    await sbReplaceAll(env, "roster", body.roster.map((r) => {
-      const row = { id: r.id, name: r.name, level: r.level, track: r.track || null, active: r.active !== false };
-      if (priorTokens[r.id]) row.peer_token = priorTokens[r.id];
-      return row;
-    }), "id");
+    // peer_token is always present, null when there is no prior one. PostgREST
+    // rejects a bulk insert whose objects have differing key sets with
+    // PGRST102 "All object keys must match", so adding the key only to people
+    // who had a token took the whole roster down: the delete had already run.
+    await sbReplaceAll(env, "roster", body.roster.map((r) => ({
+      id: r.id, name: r.name, level: r.level, track: r.track || null,
+      active: r.active !== false, peer_token: priorTokens[r.id] || null
+    })), "id");
     report.roster = body.roster.length;
     report.tokens_preserved = body.roster.filter((r) => priorTokens[r.id]).length;
   }
