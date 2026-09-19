@@ -51,10 +51,30 @@ So the division of labour holds: the Worker creates the task and sets the status
 through the API, and a rule picks it up and sets Action Required. The thing the
 API cannot write, an automation writes for it.
 
+### The whole KPI chain, run end to end
+
+Driven through the API exactly as the Worker drives it, against `Test Josh` as an
+associate editor, in a `Test Josh` project under Performance Records:
+
+```
+KPI task created, assigned to Test Josh
+  P1  +4s  action required -> Test Josh
+status -> Locked
+  P2  +4s  action required -> Rashy
+status -> Filed
+  P3  +4s  action required -> (none)
+final: status "Filed", assignee Test Josh
+```
+
+The baton passes correctly at every step: editor, then supervisor, then cleared.
+Forty-three ClickUp rules replaced by five, and the per-person folder structure is
+no longer doing any routing work.
+
 What is still unproven is whether Action Required also produces a **notification**
 a person actually sees. That needs a human to look at their own GoodDay, and it
 is why every rule now carries an explicit notification action rather than relying
-on Action Required alone to be noticed.
+on Action Required alone to be noticed. P2 fires at the Locked step and names
+Joshua and Rashy, so that step is the one to check.
 
 ### Three ways the built rules differ from the spec below, and why
 
