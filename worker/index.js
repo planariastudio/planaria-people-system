@@ -20073,8 +20073,14 @@ async function gdResolveEditorProject(env, editorId, editorName, type) {
   const cached = GD_PROJECT_CACHE.get(key);
   if (cached) return gdRef(cached, type);
 
+  // "Performance Records", renamed from "Team" on 2026-09-19 because the folder
+  // holds each person's KPI, Peer and PIP record and "Team" said none of that.
+  // This literal is the live lookup path, NOT a fallback: GOODDAY_TEAM_ID is not
+  // actually set anywhere, despite being in .dev.vars.example. Get it wrong and
+  // goodDayGetOrCreateProject creates a second, empty folder rather than failing,
+  // and every task from then on is filed into it.
   const teamId = env.GOODDAY_TEAM_ID
-    || (await goodDayGetOrCreateProject(env, "Team", env.GOODDAY_PEOPLE_ID)).id;
+    || (await goodDayGetOrCreateProject(env, "Performance Records", env.GOODDAY_PEOPLE_ID)).id;
   // get-or-create, matching what clickupGetOrCreateFolder did. The projects are
   // provisioned from the roster ahead of time by provision_goodday_people.mjs, so
   // in practice this always finds one; it creates only if somebody joined since.

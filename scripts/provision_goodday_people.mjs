@@ -5,7 +5,7 @@
 // Builds, under the People workspace:
 //
 //   People                       (GOODDAY_PEOPLE_ID, must already exist)
-//     Team                       created if missing
+//     Performance Records         created if missing
 //       <person>                 one project per roster entry
 //       <person>
 //       ...
@@ -81,10 +81,6 @@ async function fetchRoster() {
   return { roster, version: cfg.version };
 }
 
-// A person's project is named by their roster `id`, which is the short name the
-// rest of the system already keys on ("Eduardus Kent", not the full legal name).
-// Keeping that identical everywhere is what lets a later script match a project
-// back to a roster row without a second mapping table.
 // The roster's `name`, not its `id`. The id is a short slug ("Eduardus Kent",
 // "Richo Darma") that exists to be a stable key, and naming projects after it
 // meant the sidebar disagreed with the roster everywhere else in the system.
@@ -133,16 +129,16 @@ async function main() {
   if (DRY) {
     console.log("\n  Would ensure:");
     console.log("    People (" + env.GOODDAY_PEOPLE_ID + ")");
-    console.log("      Team");
+    console.log("      Performance Records");
     for (const p of people) console.log("        " + projectNameFor(p) + "   [" + (p.level || "?") + "]");
     console.log("\n  Nothing was created. Re-run with --apply to make these.\n");
     return;
   }
 
-  // --- Team folder ---------------------------------------------------------
-  const team = await goodDayGetOrCreateProject(env, "Team", env.GOODDAY_PEOPLE_ID);
-  if (!team || !team.id) die("Could not create or find the Team project under People.");
-  console.log("\n  Team -> " + team.id);
+  // --- Performance Records folder ------------------------------------------
+  const team = await goodDayGetOrCreateProject(env, "Performance Records", env.GOODDAY_PEOPLE_ID);
+  if (!team || !team.id) die("Could not create or find the Performance Records folder under People.");
+  console.log("\n  Performance Records -> " + team.id);
 
   // --- one project per person ---------------------------------------------
   const existing = await goodDaySubProjects(env, team.id);
@@ -175,10 +171,10 @@ async function main() {
   }
   const dupes = [...counts.entries()].filter(([, n]) => n > 1);
   if (dupes.length) {
-    console.log("\n  WARNING duplicate projects under Team, delete the extras by hand:");
+    console.log("\n  WARNING duplicate projects under Performance Records, delete the extras by hand:");
     for (const [name, n] of dupes) console.log("    " + name + " x" + n);
   } else {
-    console.log("  verified  " + after.length + " projects under Team, no duplicates");
+    console.log("  verified  " + after.length + " projects under Performance Records, no duplicates");
   }
 
   console.log("\n  Next, by hand (there is no Views endpoint in the API):");

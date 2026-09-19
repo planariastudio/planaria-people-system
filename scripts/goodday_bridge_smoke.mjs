@@ -97,7 +97,7 @@ async function main() {
   // --- 1. container resolution ---------------------------------------------
   console.log("\n  1. resolve the person's project");
   const teamId = env.GOODDAY_TEAM_ID
-    || (await goodDayGetOrCreateProject(env, "Team", env.GOODDAY_PEOPLE_ID)).id;
+    || (await goodDayGetOrCreateProject(env, "Performance Records", env.GOODDAY_PEOPLE_ID)).id;
   const proj = await goodDayGetOrCreateProject(env, PERSON, teamId);
   ok("project found under People > Team", !!proj && !!proj.id, proj && proj.id);
   const ref = gdRef(proj.id, "kpi");

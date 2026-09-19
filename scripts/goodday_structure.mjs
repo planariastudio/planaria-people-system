@@ -43,7 +43,7 @@ const SPEC = {
     children: [
       { name: "Staff records", note: "the database, contracts, identity documents" },
       { name: "Admin", note: "leads only. Embed links_admin.html here as a view." },
-      { name: "Team", note: "one project per person underneath, built by provision_goodday_people.mjs" }
+      { name: "Performance Records", note: "one project per person underneath, built by provision_goodday_people.mjs" }
     ]
   },
   "Hiring": {

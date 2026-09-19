@@ -70,7 +70,7 @@ browser = { binding = "MYBROWSER" }
 # GoodDay, for the migration. All three are secrets, set the same way:
 #   GOODDAY_TOKEN         org API token, from Settings -> API
 #   GOODDAY_BOT_USER_ID   who actions are attributed to; GoodDay requires it
-#   GOODDAY_TEAM_ID       the "Team" project under People (JORtmi)
+#   GOODDAY_TEAM_ID       the "Performance Records" folder under People (JORtmi)
 #   GOODDAY_ENABLED       "1" sends every task operation to GoodDay instead of
 #                         ClickUp. Leave it unset until the first three are set
 #                         AND the roster has GoodDay accounts, or tasks will be
