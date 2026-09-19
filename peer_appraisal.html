@@ -180,7 +180,7 @@ async function loadConfig(){
 }
 const RATER_TOKEN=new URLSearchParams(location.search).get('t')||null;
 // When a link was minted for one specific pairing (links_admin's per-assignment
-// "Add task in ClickUp"), the target + cycle are baked into the URL so the rater
+// "Add task"), the target + cycle are baked into the URL so the rater
 // never has to pick from a dropdown -- see applyDeepLinkTarget() in boot(). A
 // bare personal link (no target param) still falls back to the full picker.
 const TARGET_PARAM=new URLSearchParams(location.search).get('target')||null;
@@ -543,7 +543,7 @@ function boot(){
       document.body.innerHTML='<div style="padding:60px 40px;font-family:sans-serif;max-width:560px;margin:0 auto;text-align:center">'+
         '<h2 style="color:#0d9488">Personal link required</h2>'+
         '<p style="color:#374151;line-height:1.6">This form must be opened using your own peer-appraisal link so your rating is recorded correctly and counted only once per cycle.</p>'+
-        '<p style="color:#6b7280">Check ClickUp for a task assigned to you with your link, or ask your admin.</p></div>';
+        '<p style="color:#6b7280">Check your task list for a task assigned to you with your link, or ask your admin.</p></div>';
       return;
     }
     if(!CLUSTERS.length){ bootBanner('Config loaded, but the Peer Rubric came back empty — ask your admin to re-sync the Sheet to the Worker.'); return; }

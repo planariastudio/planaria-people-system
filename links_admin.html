@@ -70,7 +70,7 @@
   <div class="section" style="--sa:var(--kpi)">
     <div class="seyebrow">KPI</div>
     <h2>Personal links</h2>
-    <p class="lede">One reusable link per person for their own KPI self-review — opening it locks the form to just them, so nobody can fill in anyone else's. The same token also powers their Peer Appraisal link, shown in the rater assignments below. <b>Add task in ClickUp</b> creates a real task with the link attached, assigned to them, scoped to whichever quarter is picked in the Case tracker below — so the link is only ever discovered by clicking through from ClickUp.</p>
+    <p class="lede">One reusable link per person for their own KPI self-review — opening it locks the form to just them, so nobody can fill in anyone else's. The same token also powers their Peer Appraisal link, shown in the rater assignments below. <b>Add task</b> creates a real task with the link attached, assigned to them, scoped to whichever quarter is picked in the Case tracker below — so the link is only ever discovered by clicking through from their task.</p>
     <div class="card" style="padding:0;overflow:hidden">
       <table>
         <thead><tr><th>Name</th><th style="min-width:340px">KPI self-review link</th></tr></thead>
@@ -245,7 +245,7 @@ async function loadAllLinks(){
   tbody.innerHTML=people.map(p=>`
     <tr data-name="${p.name}">
       <td><b>${p.name}</b></td>
-      <td><div class="linkcell" style="margin-top:0"><input readonly value="${p.kpi_link}"><button class="btn mini copyBtn" type="button">Copy</button><button class="btn mini kpi kpiTaskBtn" type="button">Add task in ClickUp</button></div></td>
+      <td><div class="linkcell" style="margin-top:0"><input readonly value="${p.kpi_link}"><button class="btn mini copyBtn" type="button">Copy</button><button class="btn mini kpi kpiTaskBtn" type="button">Add task</button></div></td>
     </tr>`).join('');
   wireCopy(tbody);
   tbody.querySelectorAll('.kpiTaskBtn').forEach(b=>b.addEventListener('click',()=>addKpiLinkTask(b)));
@@ -263,8 +263,8 @@ async function addKpiLinkTask(btn){
     // for the same editor+quarter instead of doing anything useful.
     await loadKpiTracker();
     if(j.reused)showTaskPlacement(`${name} already had an open task for ${cycle} — reused it instead of creating a second one.`,j.task_url);
-    else if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${name} › ${j.list_name}`,j.task_url);
-  }catch(e){ btn.disabled=false;btn.textContent='Add task in ClickUp'; alert('Failed to create task: '+e.message); }
+    else if(j.list_name)showTaskPlacement(`Task created → ${name} › ${j.list_name}`,j.task_url);
+  }catch(e){ btn.disabled=false;btn.textContent='Add task'; alert('Failed to create task: '+e.message); }
 }
 
 function kpiCycle(){const q=document.getElementById('kQ').value,y=document.getElementById('kY').value;return (q&&y.length===4)?(q+' '+y):'';}
@@ -292,13 +292,13 @@ async function loadKpiTracker(){
     </tr>`).join('');
   tbody.querySelectorAll('.kpiDelBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm(`Remove case ${id}?\n\nThis deletes the case here, its ClickUp task, and its row in the Sheet (KPI_Raw) if it was ever filed — everything stays in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days. The Sheet row does not have an equivalent undo.`))return;
+    if(!confirm(`Remove case ${id}?\n\nThis deletes the case here, its task, and its row in the Sheet (KPI_Raw) if it was ever filed — everything stays in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days. The Sheet row does not have an equivalent undo.`))return;
     b.disabled=true;b.textContent='Removing…';
     try{
       const j=await api(`/kpi/cases/${encodeURIComponent(id)}`,{method:'DELETE'});
       await loadKpiTracker();
       const problems=[];
-      if(j.had_task&&!j.clickup_deleted)problems.push('its ClickUp task could not be deleted — remove it in ClickUp by hand');
+      if(j.had_task&&!j.clickup_deleted)problems.push('its task could not be deleted — remove it in ClickUp by hand');
       if(problems.length)alert(`Case ${id} was removed here, but ${problems.join('; ')}.`);
     }
     catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
@@ -306,7 +306,7 @@ async function loadKpiTracker(){
   syncKpiTaskButtons();
 }
 // Cross-references the Case tracker (just loaded) against the Personal Links table's
-// "Add task in ClickUp" buttons, so a case that already has a reminder task for the
+// "Add task" buttons, so a case that already has a reminder task for the
 // selected quarter shows as done instead of staying clickable and risking a second,
 // orphaned case id (KPI-...-02) for the same editor+quarter.
 function syncKpiTaskButtons(){
@@ -315,7 +315,7 @@ function syncKpiTaskButtons(){
     const btn=tr.querySelector('.kpiTaskBtn');
     if(!btn)return;
     if(tasked.has(tr.dataset.name)){btn.disabled=true;btn.textContent='✓ Task added';}
-    else{btn.disabled=false;btn.textContent='Add task in ClickUp';}
+    else{btn.disabled=false;btn.textContent='Add task';}
   });
 }
 
@@ -342,12 +342,12 @@ async function loadPipTracker(){
   }).join('');
   tbody.querySelectorAll('.pipDelBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm(`Remove PIP case ${id}?\n\nThis deletes the case here, its ClickUp task, and its row in the Sheet (PIP_Raw) if it had one — everything stays in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days. The Sheet row does not have an equivalent undo.`))return;
+    if(!confirm(`Remove PIP case ${id}?\n\nThis deletes the case here, its task, and its row in the Sheet (PIP_Raw) if it had one — everything stays in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days. The Sheet row does not have an equivalent undo.`))return;
     b.disabled=true;b.textContent='Removing…';
     try{
       const j=await api(`/pip/cases/${encodeURIComponent(id)}`,{method:'DELETE'});
       await loadPipTracker();
-      if(j.had_task&&!j.clickup_deleted)alert(`PIP ${id} was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.`);
+      if(j.had_task&&!j.clickup_deleted)alert(`PIP ${id} was removed here, but its task could not be deleted — remove it in ClickUp by hand.`);
     }
     catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
   }));
@@ -425,12 +425,12 @@ async function loadRows(){
     // this warning is meaningfully different from the "nothing submitted yet" case.
     const msg=tr.dataset.completed
       ? `Remove ${tr.dataset.rater}'s assignment to rate ${tr.children[1].textContent}?\n\nThis deletes the assignment here, its ClickUp task if one was created, and their submitted rating from the Sheet (Peer_Raw). This does not affect the pooled scores shown elsewhere if others also rated this person.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`
-      : `Remove this assignment?\n\nThis deletes it here and its ClickUp task if one was created. Nothing has been submitted for it yet.`;
+      : `Remove this assignment?\n\nThis deletes it here and its task if one was created. Nothing has been submitted for it yet.`;
     if(!confirm(msg))return;
     try{
       const j=await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'});
       tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';}
-      if(j.clickup_deleted===false)alert('The assignment was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
+      if(j.clickup_deleted===false)alert('The assignment was removed here, but its task could not be deleted — remove it in ClickUp by hand.');
     }
     catch(e){ alert('Failed to remove: '+e.message); }
   }));
@@ -453,11 +453,11 @@ async function loadPeerScorecards(){
     </tr>`).join('');
   tbody.querySelectorAll('.delBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr'),target=tr.dataset.target;
-    if(!confirm(`Remove ${target}'s pooled Peer Scorecard for ${cycle}?\n\nThis deletes the ClickUp scorecard task and every rater's submitted rating behind it (their individual assignment rows above are untouched, so it can be re-pooled from scratch if raters submit again). This does not affect any other cycle or any other person's scorecard.`))return;
+    if(!confirm(`Remove ${target}'s pooled Peer Scorecard for ${cycle}?\n\nThis deletes the scorecard task and every rater's submitted rating behind it (their individual assignment rows above are untouched, so it can be re-pooled from scratch if raters submit again). This does not affect any other cycle or any other person's scorecard.`))return;
     try{
       const j=await api(`/peer/scorecard?target=${encodeURIComponent(target)}&cycle=${encodeURIComponent(cycle)}`,{method:'DELETE'});
       tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No pooled scorecards yet for this cycle.';}
-      if(j.clickup_deleted===false)alert('The scorecard was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
+      if(j.clickup_deleted===false)alert('The scorecard was removed here, but its task could not be deleted — remove it in ClickUp by hand.');
     }
     catch(e){ alert('Failed to remove: '+e.message); }
   }));
@@ -471,7 +471,7 @@ async function addPeerLinkTask(btn){
     // rating when they open it (see peer_appraisal.html's target/cycle params).
     const j=await api('/peer/create-assignment-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
     btn.disabled=true;btn.textContent='✓ Task added';
-    if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${rater} › ${j.list_name}`,j.task_url);
+    if(j.list_name)showTaskPlacement(`Task created → ${rater} › ${j.list_name}`,j.task_url);
   }catch(e){ btn.disabled=false;btn.textContent='Add task'; alert('Failed to create task: '+e.message); }
 }
 

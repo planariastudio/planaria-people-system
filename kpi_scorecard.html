@@ -295,7 +295,7 @@ function renderPersonalLinkRequired(){
   $('ctxHost').innerHTML='';
   $('stageHost').innerHTML=`<div class="gate">
     <h1>Personal link required</h1>
-    <p>This form must be opened using your own KPI link, so you can only ever score your own review. Check ClickUp for a task assigned to you with your link, or ask your supervisor.</p>
+    <p>This form must be opened using your own KPI link, so you can only ever score your own review. Check your task list for a task assigned to you with your link, or ask your supervisor.</p>
   </div>`;
 }
 function enterEditor(){
@@ -429,7 +429,7 @@ function slugFor(name){const r=ROSTER.find(x=>x[0]===name);return r?r[2]:'';}
 /* ===== EDITOR: auto-id =====
    One self-review per editor per quarter. Previously this always minted a fresh
    id via /kpi/next-id and only *warned* if one was already locked -- the warning
-   didn't stop anything, so reopening the personal link (from ClickUp, a second
+   didn't stop anything, so reopening the personal link (from your task, a second
    tab, etc.) after locking silently started a second, independently-lockable
    case. Now: if an open case already exists for this editor+quarter -- locked,
    or just a draft/admin-placeholder -- it's resumed by id instead of minting a
@@ -659,10 +659,10 @@ function renderReview(){
     // it goes anywhere, rather than a summary that only resembles it.
     const already=!!(KPICASE&&KPICASE.finalized);
     $('stageHost').innerHTML=`<div class="step"><div class="eyebrow">Review · supervisor</div><h2>Result card preview</h2>
-      <p class="hint">This is exactly what gets filed to ClickUp and saved as the official record. Check it, then file.</p>
+      <p class="hint">This is exactly what gets filed and saved as the official record. Check it, then file.</p>
       <div class="previewnote">${already
         ? `<span>🔒</span><span><b>Already filed.</b> This case is closed — the card below is the filed record.</span>`
-        : `<span>👁</span><span><b>Not filed yet.</b> Nothing is saved until you press <b>File to ClickUp</b>.</span>`}</div>
+        : `<span>👁</span><span><b>Not filed yet.</b> Nothing is saved until you press <b>File result</b>.</span>`}</div>
       <div class="kpicard">${window.KPICARD.html(buildPreviewPayload())}</div></div>`;
   }
   wire();
@@ -760,7 +760,7 @@ function renderFooter(){
   }else{
     const canFile=!(KPICASE&&KPICASE.finalized);
     nav.innerHTML=`<button class="btn" id="btnBack">← Back</button><div class="spacer"></div>`+
-      (canFile?`<button class="btn primary" id="rFile">File to ClickUp</button>`:'');
+      (canFile?`<button class="btn primary" id="rFile">File result</button>`:'');
   }
 }
 
@@ -815,7 +815,7 @@ function buildPreviewPayload(){
     categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
 }
 async function fileFinal(){
-  if(!confirm(`File the KPI result for ${ED.editor}?\n\nThis creates the ClickUp report PDF and closes the case.`))return;
+  if(!confirm(`File the KPI result for ${ED.editor}?\n\nThis creates the report PDF and closes the case.`))return;
   const b=$('rFile');b.disabled=true;b.textContent='Filing…';
   const payload={id:caseId,supervisor:'Supervisor',official_kpi:overall('spv'),
     categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
@@ -824,7 +824,7 @@ async function fileFinal(){
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
     clearDraft(); // filed; the case is closed and the draft can only be noise from here
     showDone('filed',caseId,j);
-  }catch(e){b.disabled=false;b.textContent='File to ClickUp';alert('Failed to file: '+e.message);}
+  }catch(e){b.disabled=false;b.textContent='File result';alert('Failed to file: '+e.message);}
 }
 
 /* ===== done screens ===== */

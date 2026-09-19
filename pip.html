@@ -310,7 +310,7 @@ function recompute(){
   if(fileBtn){
     const isFinal=(v.k==='pass'||v.k==='fail');
     fileBtn.disabled=!isFinal;
-    fileBtn.title=isFinal?'File this verdict to ClickUp':'Available once a final verdict (PASS or NOT MET) is reached';
+    fileBtn.title=isFinal?'File this verdict':'Available once a final verdict (PASS or NOT MET) is reached';
   }
 }
 function buildPayload(){
@@ -373,7 +373,7 @@ async function savePip(finalizing){
     DIRTY=false; // server now holds everything on screen
     b.textContent=finalizing?'Filed ✓':'Saved ✓';
     if(finalizing){
-      alert(`Verdict FILED and PIP closed (ClickUp task ${j.clickup_task_id}). A new PIP can now be started for ${edSel.value} if ever needed.`);
+      alert(`Verdict FILED and PIP closed (task ${j.clickup_task_id}). A new PIP can now be started for ${edSel.value} if ever needed.`);
     }
     updateCaseLink(pipId);
     setTimeout(()=>{$('btnSave').disabled=false;b.textContent=orig;recompute();},1500);
