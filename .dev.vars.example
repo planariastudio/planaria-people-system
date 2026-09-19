@@ -1,0 +1,37 @@
+# Copy to `.dev.vars` and fill in. That file is already gitignored and must stay
+# that way. Never paste these values into a chat, a commit, or a form.
+#
+#   cp .dev.vars.example .dev.vars
+#
+# `.dev.vars` is Cloudflare's own convention: `wrangler dev` reads it, and the
+# scripts in this repo read it too so there is one place to look.
+#
+# The worker's PRODUCTION copies of these live somewhere else entirely, set once
+# with `wrangler secret put NAME`. Filling this file in does not deploy anything.
+
+# --- GoodDay -----------------------------------------------------------------
+
+# Settings -> API in GoodDay. An org-level token; treat it like a password.
+GOODDAY_TOKEN=
+
+# The user that actions are attributed to. GoodDay requires `fromUserId` on every
+# task create, which ClickUp did not, so this is NOT optional.
+# Find it: run `node scripts/goodday_preflight.mjs --whoami` once the token is set.
+GOODDAY_BOT_USER_ID=
+
+# The People workspace id. Currently `6kRwYR` (renamed from Team & Operations
+# on 19 Sep 2026). Check it is still right before provisioning.
+GOODDAY_PEOPLE_ID=6kRwYR
+
+# Optional. The project template new projects are created from. Leave blank to
+# let GoodDay pick its default.
+GOODDAY_PROJECT_TEMPLATE_ID=
+
+# --- Existing worker secrets, only needed for LOCAL runs ---------------------
+# The deployed worker already has these; you do not need them here unless you are
+# running the worker locally with `wrangler dev`.
+
+# SUPABASE_URL=
+# SUPABASE_SERVICE_KEY=
+# CLICKUP_TOKEN=
+# PEER_ADMIN_KEY=

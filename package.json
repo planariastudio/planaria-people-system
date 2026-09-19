@@ -9,7 +9,9 @@
     "test": "node --test",
     "verify": "npm run check && npm test",
     "predeploy": "npm run verify",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "preflight": "node scripts/goodday_preflight.mjs",
+    "provision": "node scripts/provision_goodday_people.mjs"
   },
   "devDependencies": {
     "wrangler": "^3.80.0"
