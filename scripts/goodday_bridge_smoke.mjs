@@ -24,6 +24,7 @@ import {
   goodDayUpdateTask,
   goodDayDeleteTask,
   goodDayComment,
+  goodDayAttachPdf,
   goodDaySetStatus,
   goodDayListStatuses,
   goodDayListTaskTypes,
@@ -187,8 +188,36 @@ async function main() {
   console.log("\n  7. comment");
   ok("comment posted", await goodDayComment(env, task.id, "Smoke test comment. " + url) === true);
 
-  // --- 8. cleanup -----------------------------------------------------------
-  console.log("\n  8. cleanup");
+  // --- 8. PDF attachment ----------------------------------------------------
+  //
+  // Every filed KPI, peer scorecard and PIP verdict carries a rendered PDF, so
+  // this is not an optional path. Uploading is two steps in GoodDay -- ask for a
+  // slot, PUT the bytes to it -- and the attachment then has to be referenced as
+  // an OBJECT on a comment, not as a bare file id. A real (tiny) PDF is used
+  // rather than random bytes so nothing can pass on a technicality.
+  console.log("\n  8. PDF attachment");
+  const pdf = new TextEncoder().encode(
+    "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
+    "2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n" +
+    "trailer<</Root 1 0 R>>\n%%EOF\n"
+  );
+  let attached = null;
+  try {
+    attached = await goodDayAttachPdf(env, task.id, "smoke-test.pdf", pdf, "Smoke test PDF");
+    ok("uploaded and attached", !!attached && !!attached.fileId, attached && attached.fileId);
+  } catch (e) {
+    ok("uploaded and attached", false, e.message);
+  }
+  if (attached) {
+    const feed2 = await getMessages(task.id);
+    const withFile = feed2.find((m) => Array.isArray(m.attachments) && m.attachments.length);
+    ok("the attachment is actually ON the task, not just uploaded somewhere",
+      !!withFile, withFile ? JSON.stringify(withFile.attachments).slice(0, 90) : "no message carries it");
+  }
+
+  // --- 9. cleanup -----------------------------------------------------------
+  console.log("\n  9. cleanup");
   if (KEEP) {
     console.log("    kept: " + url);
   } else {
