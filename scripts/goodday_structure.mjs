@@ -62,8 +62,8 @@ const SPEC = {
     ]
   },
   "Workbench": {
-    id: null,
-    note: "CREATE THIS WORKSPACE BY HAND FIRST, then put its id here.",
+    id: "P1jWSq",
+    note: "Owner tier. Sandbox is where a structural change gets tested before it touches anything real.",
     children: [
       { name: "Templates" },
       { name: "Automations", note: "the register: one task per rule, mirroring GOODDAY_AUTOMATIONS.md" },
@@ -72,8 +72,8 @@ const SPEC = {
     ]
   },
   "Business": {
-    id: null,
-    note: "CREATE THIS WORKSPACE BY HAND FIRST, then put its id here.",
+    id: "A9VqHe",
+    note: "Owner tier. Client identity lives in CRM Accounts, so no second client list here.",
     children: [
       { name: "Pipeline" },
       { name: "Rate card" },
