@@ -98,12 +98,27 @@ async function goodDayResolveUserId(env, nameOrEmail) {
 // depends on them existing.
 async function goodDayCreateTask(env, projectId, title, opts = {}) {
   const payload = { projectId, title, fromUserId: env.GOODDAY_BOT_USER_ID };
-  if (opts.markdown_description) payload.message = opts.markdown_description;
-  if (opts.message) payload.message = opts.message;
+  if (opts.markdown_description) payload.message = gdText(opts.markdown_description);
+  if (opts.message) payload.message = gdText(opts.message);
   if (opts.start_date) payload.startDate = gdDate(opts.start_date);
   if (opts.due_date) payload.deadline = gdDate(opts.due_date);
   if (opts.startDate) payload.startDate = opts.startDate;
+  if (opts.endDate) payload.endDate = gdDate(opts.endDate);
+  if (opts.end_date) payload.endDate = gdDate(opts.end_date);
   if (opts.deadline) payload.deadline = opts.deadline;
+
+  // GoodDay SILENTLY DROPS startDate unless endDate is sent with it. Verified
+  // against the live API 2026-09-19: startDate alone comes back null, and so does
+  // startDate + deadline. Only startDate + endDate sticks.
+  //
+  // ClickUp accepted start_date on its own, so a straight port would lose every
+  // start date without erroring. Rather than invent an end date, drop the start
+  // date explicitly and say so, so the loss is visible instead of silent.
+  if (payload.startDate && !payload.endDate) {
+    delete payload.startDate;
+    payload.__droppedStartDate = undefined; // documentation only; not sent
+    delete payload.__droppedStartDate;
+  }
   if (opts.priority) payload.priority = opts.priority;
   if (opts.parent) payload.parentTaskId = opts.parent;
   if (opts.parentTaskId) payload.parentTaskId = opts.parentTaskId;
@@ -118,6 +133,36 @@ async function goodDayCreateTask(env, projectId, title, opts = {}) {
   const res = await gdCall(env, "POST", "/tasks", payload);
   if (!res.ok) throw new Error(`GoodDay create task failed: ${res.status} ${await gdErrText(res)}`);
   return res.json();
+}
+
+// GoodDay task descriptions and comments are PLAIN TEXT. Markdown is shown
+// literally (`**bold**` keeps its asterisks) and HTML is escaped and shown as
+// source. Only a BARE url is auto-linked and clickable.
+//
+// That matters more than it sounds: the whole People System delivery mechanism is
+// "a task with your personal link on it", and a `[text](url)` link renders as
+// unclickable punctuation. Verified in the live UI 2026-09-19.
+//
+// So everything the Worker passes as markdown is flattened here rather than at
+// each call site, which means index.js keeps composing markdown for ClickUp and
+// nothing upstream has to know.
+function gdText(md) {
+  if (md === null || md === undefined) return md;
+  let s = String(md);
+  s = s.replace(/```[\s\S]*?```/g, (m) => m.replace(/```/g, "").trim());
+  // [label](url) -> "label: url", because the label carries meaning the bare
+  // url does not, and the url has to stand alone to be clickable.
+  s = s.replace(/\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) =>
+    label && label.trim() ? `${label.trim()}: ${url}` : url);
+  s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, "");        // images: drop
+  s = s.replace(/^#{1,6}\s+/gm, "");                     // headings
+  s = s.replace(/(\*\*|__)(.*?)\1/g, "$2");             // bold
+  s = s.replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, "$1$2"); // italic
+  s = s.replace(/`([^`]+)`/g, "$1");                      // inline code
+  s = s.replace(/^\s*>\s?/gm, "");                       // blockquote
+  s = s.replace(/^\s*[-*+]\s+/gm, "- ");                 // normalise bullets
+  s = s.replace(/\n{3,}/g, "\n\n");
+  return s.trim();
 }
 
 // GoodDay dates are YYYY-MM-DD. ClickUp used ms-epoch numbers everywhere, so
@@ -154,7 +199,7 @@ async function goodDayDeleteTask(env, taskId) {
 // goodDayUploadFile, which is how a PDF reaches an EXISTING task.
 async function goodDayComment(env, taskId, text, attachments) {
   try {
-    const body = { userId: env.GOODDAY_BOT_USER_ID, message: text };
+    const body = { userId: env.GOODDAY_BOT_USER_ID, message: gdText(text) };
     // `attachments` must be an array of OBJECTS, not of fileId strings. Passing
     // bare ids returns 400 "dictionary update sequence element #0 has length 1;
     // 2 is required", which is not a helpful message and cost real time once.
@@ -205,7 +250,7 @@ async function goodDaySetStatus(env, taskId, projectId, desiredSubstring, messag
     const hit = statuses.find((s) => norm(s.name).includes(want));
     if (!hit) return false;
     const body = { userId: env.GOODDAY_BOT_USER_ID, statusId: hit.id };
-    if (message) body.message = message;
+    if (message) body.message = gdText(message);
     // PUT, not POST. The published docs say POST and POST returns 405
     // "method is not allowed". Verified against the live API 2026-09-19.
     const res = await gdCall(env, "PUT", `/task/${taskId}/status`, body);
@@ -362,6 +407,7 @@ function goodDayEnvReport(env) {
 export {
   GD_BASE,
   gdDate,
+  gdText,
   goodDayResolveUserId,
   goodDayCreateTask,
   goodDayUpdateTask,

@@ -12,6 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   gdDate,
+  gdText,
   goodDayResolveUserId,
   goodDayCreateTask,
   goodDayUpdateTask,
@@ -218,6 +219,62 @@ test("a bare fileId string is normalised into an object rather than sent raw", a
   const c = last(calls, "/comment");
   assert.equal(typeof c.body.attachments[0], "object");
   assert.equal(c.body.attachments[0].fileId, "RAW-ID");
+});
+
+test("startDate is dropped unless endDate comes with it, because GoodDay ignores it silently", async () => {
+  const { env, calls } = mkEnv([["/tasks", { json: { id: "T1" } }]]);
+  await goodDayCreateTask(env, "P1", "t", { startDate: "2026-09-19" });
+  assert.equal(last(calls, "/tasks").body.startDate, undefined,
+    "a lone startDate must not be sent: the API accepts it and returns null");
+
+  await goodDayCreateTask(env, "P1", "t", { startDate: "2026-09-19", endDate: "2026-09-30" });
+  const c = last(calls, "/tasks").body;
+  assert.equal(c.startDate, "2026-09-19");
+  assert.equal(c.endDate, "2026-09-30");
+});
+
+// --- markdown flattening ---------------------------------------------------
+//
+// GoodDay renders descriptions as PLAIN TEXT. Only a bare url is auto-linked.
+// These tests exist because the personal link IS the delivery mechanism, and a
+// markdown link renders as unclickable punctuation.
+
+test("a markdown link becomes label plus a bare, clickable url", () => {
+  const out = gdText("[Open my KPI scorecard](https://example.com/k.html?t=ABC)");
+  assert.equal(out, "Open my KPI scorecard: https://example.com/k.html?t=ABC");
+  assert.ok(!out.includes("["), "no markdown punctuation may survive");
+  assert.ok(!out.includes("]("), "no markdown punctuation may survive");
+});
+
+test("bold, headings, code and quotes are stripped, bullets kept", () => {
+  const out = gdText("# Title\n\n**Bold** and `code`\n\n> quoted\n\n* one\n* two");
+  assert.ok(!out.includes("**"));
+  assert.ok(!out.includes("#"));
+  assert.ok(!out.includes("`"));
+  assert.ok(!out.includes(">"));
+  assert.ok(out.includes("- one") && out.includes("- two"), "bullets stay readable as text");
+  assert.ok(out.includes("Bold") && out.includes("code"));
+});
+
+test("a bare url is left exactly as is, since that is what GoodDay auto-links", () => {
+  const u = "https://example.com/a?b=c&d=e";
+  assert.equal(gdText("See " + u), "See " + u);
+});
+
+test("flattening is applied on create, comment and status message", async () => {
+  const { env, calls } = mkEnv([
+    ["/tasks", { json: { id: "T1" } }],
+    ["/statuses", { json: [{ id: "s1", name: "Filed" }] }],
+    ["/status", { json: {} }],
+    ["/comment", { json: {} }]
+  ]);
+  const md = "[Link](https://x.test/p)";
+  await goodDayCreateTask(env, "P1", "t", { markdown_description: md });
+  assert.equal(last(calls, "/tasks").body.message, "Link: https://x.test/p");
+  await goodDayComment(env, "T1", md);
+  assert.equal(last(calls, "/comment").body.message, "Link: https://x.test/p");
+  await goodDaySetStatus(env, "T1", "P1", "filed", md);
+  assert.equal(last(calls, "/task/T1/status").body.message, "Link: https://x.test/p");
 });
 
 // --- projects --------------------------------------------------------------
