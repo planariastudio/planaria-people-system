@@ -39,6 +39,34 @@
 const LEVEL_KEYS = ["intern", "jr", "assoc", "senior", "supervisor", "principal"];
 var LEVEL_LABELS = { intern: "Intern", jr: "Junior", assoc: "Associate", senior: "Senior", supervisor: "Supervisor", principal: "Principal" };
 
+// Config_Levels is hand-edited, so its key column drifts: "Senior" for "senior",
+// "Associate" or "Associate (Video Editor)" for "assoc", "Jr" or "Junior" for "jr".
+// Nothing in the live system reads that tab -- the worker keys everything off the
+// lowercase keys below, and the forms carry their own hardcoded LVL_FROM_DB map.
+// So a casing drift there used to block the whole sync while breaking nothing real:
+// every roster row reported "level not in Config_Levels", and because LEVEL_LABELS
+// is rebuilt from that same key column, every rubric row reported "no bullet text
+// in ANY level column" as well. One wrong cell, 30+ errors, none of them true.
+//
+// Normalise instead of refusing. Anything that recognisably names a level resolves
+// to its canonical key, and the payload sent to the worker carries the canonical
+// form, so a drifting sheet self-corrects on the next sync rather than blocking it.
+const LEVEL_ALIASES = {
+  intern: "intern",
+  jr: "jr", junior: "jr",
+  assoc: "assoc", associate: "assoc", "associate (video editor)": "assoc", ve: "assoc", "video editor": "assoc",
+  senior: "senior",
+  supervisor: "supervisor", spv: "supervisor",
+  principal: "principal"
+};
+
+// "  Associate (Video Editor) " -> "assoc". Returns "" for anything unrecognised,
+// which the validator still reports, so a genuine typo is not silently swallowed.
+function normLevel_(v) {
+  const s = String(v == null ? "" : v).trim().toLowerCase().replace(/\s+/g, " ");
+  return LEVEL_ALIASES[s] || "";
+}
+
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Planaria")
@@ -177,14 +205,16 @@ function syncConfig() {
   const payload = { token };
 
   const rosterRows = readTable_(ss, "Config_Roster");
+  // normLevel_ or the raw value: an unrecognised level is left alone so the
+  // validator below can name it, rather than being blanked into a silent null.
   if (rosterRows) payload.roster = rosterRows.map(r => ({
-    id: String(r.id).trim(), name: r.name, level: r.level,
+    id: String(r.id).trim(), name: r.name, level: normLevel_(r.level) || r.level,
     track: r.track === "" ? null : r.track, active: r.active !== false && r.active !== "FALSE"
   }));
 
   const levelRows = readTable_(ss, "Config_Levels");
   if (levelRows) payload.levels = levelRows.map(r => ({
-    key: String(r.key).trim(), label: r.label, sort_order: Number(r.sort_order)
+    key: normLevel_(r.key) || String(r.key).trim(), label: r.label, sort_order: Number(r.sort_order)
   }));
   // Rubric tabs' level columns are headed by these labels (see writeRubric_/
   // readRubric_) -- refresh from the sheet's own Config_Levels first, so a
@@ -234,11 +264,12 @@ function syncConfig() {
 function validateConfig_(p) {
   const errs = [];
 
-  // Level keys are the backbone — everything references them.
-  let validLevelKeys = LEVEL_KEYS.slice();
+  // Config_Levels is checked for internal consistency only. It is NOT the source
+  // of valid level keys any more: LEVEL_KEYS is, because that is what the worker,
+  // the rubrics and the forms actually agree on. Deriving the vocabulary from a
+  // hand-edited display tab is what let one capitalised cell block every sync.
   if (p.levels) {
     if (p.levels.length === 0) errs.push("Config_Levels is empty — the whole ladder would vanish.");
-    validLevelKeys = p.levels.map(l => l.key);
     const seen = {};
     p.levels.forEach(l => {
       if (!l.key) errs.push("Config_Levels: a row is missing its key.");
@@ -258,17 +289,27 @@ function validateConfig_(p) {
       if (r.id && seen[r.id]) errs.push(`Config_Roster: duplicate id "${r.id}".`);
       seen[r.id] = true;
       if (!r.name) errs.push(`Config_Roster: row with id "${r.id}" is missing a name.`);
-      if (r.level && validLevelKeys.indexOf(r.level) === -1)
-        errs.push(`Config_Roster: "${where}" has level "${r.level}" which is not in Config_Levels (valid: ${validLevelKeys.join(", ")}).`);
+      // Checked against LEVEL_KEYS, not Config_Levels. Those are the keys the
+      // worker, the rubrics and the forms all agree on; Config_Levels is a
+      // display tab nothing reads, so letting its casing decide who is valid
+      // blocked syncs over a cosmetic difference. Casing and the usual aliases
+      // ("Junior", "Associate (Video Editor)", "spv") are normalised before we
+      // get here, so anything still failing is a real typo worth naming.
+      if (r.level && LEVEL_KEYS.indexOf(r.level) === -1)
+        errs.push(`Config_Roster: "${where}" has level "${r.level}", which is not a level. Valid: ${LEVEL_KEYS.join(", ")}.`);
       if (r.track && ["ic", "mg"].indexOf(String(r.track)) === -1)
         errs.push(`Config_Roster: "${where}" has track "${r.track}" — only "ic", "mg", or blank are allowed.`);
     });
   }
 
   // Rubrics: unique numeric ids, required base fields, no fully-empty rows.
-  checkRubric_(errs, p.kpi_rubric, "Config_KPI", ["category", "metric"], validLevelKeys);
-  checkRubric_(errs, p.peer_rubric, "Config_Peer", ["cluster", "value"], validLevelKeys);
-  checkRubric_(errs, p.pip_rubric, "Config_PIP", ["competency", "kind"], validLevelKeys);
+  // LEVEL_KEYS, not validLevelKeys. readRubric_ always keys its levels{} by the
+  // canonical keys, so checking against whatever Config_Levels happens to say
+  // was comparing against the wrong vocabulary: one capitalised cell there made
+  // every row in all three rubrics report empty bullets.
+  checkRubric_(errs, p.kpi_rubric, "Config_KPI", ["category", "metric"], LEVEL_KEYS);
+  checkRubric_(errs, p.peer_rubric, "Config_Peer", ["cluster", "value"], LEVEL_KEYS);
+  checkRubric_(errs, p.pip_rubric, "Config_PIP", ["competency", "kind"], LEVEL_KEYS);
 
   // Lists: required keys must be present and shaped right.
   if (p.lists) {
@@ -334,12 +375,19 @@ function readRubric_(ss, tabName, baseHeaders) {
     baseHeaders.forEach(h => { rec[h] = h === "id" ? Number(row[h]) : row[h]; });
     const levels = {};
     LEVEL_KEYS.forEach(k => {
-      // Columns are written using the human label (LEVEL_LABELS), not the raw
-      // key -- e.g. "jr" is written as header "Junior". Must read back by the
-      // same label or every level column comes back empty and sync gets
-      // blocked with "no bullet text in ANY level column" for every row.
-      const header = LEVEL_LABELS[k] || k;
-      const cell = row[header];
+      // Which header actually holds a level depends on how the tab was last
+      // written: the human label ("Junior"), the raw key ("jr"), or a drifted
+      // casing ("Senior"). Reading by label alone is what made every rubric row
+      // report "no bullet text in ANY level column" whenever Config_Levels
+      // disagreed with the headers, even though the bullets were sitting right
+      // there. Try the label, then the key, then any header that names this
+      // level however it happens to be spelled.
+      let cell = row[LEVEL_LABELS[k]];
+      if (cell === undefined) cell = row[k];
+      if (cell === undefined) {
+        const hit = headers.find(h => normLevel_(h) === k);
+        if (hit) cell = row[hit];
+      }
       if (cell === "" || cell === null || cell === undefined) { levels[k] = []; return; }
       levels[k] = String(cell).split("\n")
         .map(s => s.replace(/^[\s•·\-\*]+/, "").trim())

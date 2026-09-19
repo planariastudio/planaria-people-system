@@ -47,5 +47,15 @@ for (const f of readdirSync(".").filter((n) => n.endsWith(".html")).sort()) {
   r.status === 0 ? ok(f) : fail(f, (r.stderr || "").slice(0, 500));
 }
 
+// 4. Apps Script — classic scripts that live inside the Google Sheet. They are not
+//    deployed from this repo, but they are edited here first and pasted across, and
+//    a syntax error in one takes out the whole Planaria menu: no Sync, no Pull, and
+//    no obvious cause. Checked over stdin because `node --check` refuses a .gs path
+//    outright ("Unknown file extension") rather than reading it as a script.
+for (const f of ["scripts/config_editor_Code.gs", "scripts/sheet_mirror_v2_Code.gs"]) {
+  const r = spawnSync(node, ["--check"], { input: readFileSync(f, "utf8"), encoding: "utf8" });
+  r.status === 0 ? ok(f + " (Apps Script)") : fail(f + " (Apps Script)", (r.stderr || "").slice(0, 500));
+}
+
 console.log(failures ? `\n${failures} FILE(S) FAILED SYNTAX CHECK` : "\nAll files pass syntax check.");
 process.exit(failures ? 1 : 0);
