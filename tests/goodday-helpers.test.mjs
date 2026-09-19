@@ -153,6 +153,7 @@ test("set status matches case-insensitively by substring, like ClickUp did", asy
   ]);
   assert.equal(await goodDaySetStatus(env, "T1", "P1", "in progress"), true);
   const c = last(calls, "/task/T1/status");
+  assert.equal(c.method, "PUT", "POST returns 405 on the live API despite what the docs say");
   assert.equal(c.body.statusId, "s2");
 });
 
@@ -180,8 +181,9 @@ test("upload is request-url then PUT the bytes, and returns the fileId", async (
     ["/attachments/upload-urls", { json: [{ fileId: "F1", uploadUrl: "https://upload.example/F1" }] }],
     ["upload.example", { json: {} }]
   ]);
-  const id = await goodDayUploadFile(env, "kpi.pdf", new Uint8Array([1, 2, 3]));
-  assert.equal(id, "F1");
+  const file = await goodDayUploadFile(env, "kpi.pdf", new Uint8Array([1, 2, 3]));
+  assert.equal(file.fileId, "F1");
+  assert.equal(file.mime, "application/pdf", "the descriptor is needed whole, ids alone are rejected");
   const put = last(calls, "upload.example");
   assert.equal(put.method, "PUT");
   assert.equal(put.headers["Content-Type"], "application/pdf");
@@ -196,7 +198,9 @@ test("attach posts the fileId as a comment, which is how an EXISTING task gets a
   const out = await goodDayAttachPdf(env, "T1", "kpi.pdf", new Uint8Array([1]), "Q3 result");
   assert.equal(out.fileId, "F2");
   const c = last(calls, "/comment");
-  assert.deepEqual(c.body.attachments, ["F2"]);
+  // Objects, not bare ids. Bare ids return 400 from the live API.
+  assert.equal(c.body.attachments[0].fileId, "F2");
+  assert.ok(c.body.attachments[0].mime, "mime must be present or GoodDay rejects the comment");
   assert.equal(c.body.message, "Q3 result");
 });
 
@@ -206,6 +210,14 @@ test("attach throws if the upload slot comes back malformed", async () => {
     () => goodDayUploadFile(env, "x.pdf", new Uint8Array([1])),
     /returned no slot/
   );
+});
+
+test("a bare fileId string is normalised into an object rather than sent raw", async () => {
+  const { env, calls } = mkEnv([["/comment", { json: { ok: true } }]]);
+  await goodDayComment(env, "T1", "note", ["RAW-ID"]);
+  const c = last(calls, "/comment");
+  assert.equal(typeof c.body.attachments[0], "object");
+  assert.equal(c.body.attachments[0].fileId, "RAW-ID");
 });
 
 // --- projects --------------------------------------------------------------

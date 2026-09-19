@@ -89,8 +89,10 @@ async function main() {
   for (const r of [...report.required, ...report.optional]) {
     console.log("  env    " + r.name.padEnd(30) + (r.present ? "set" : "MISSING"));
   }
-  if (!report.ready) die("Required env missing. Copy .dev.vars.example to .dev.vars and fill it in.");
+  // --whoami must run BEFORE the readiness gate: it is how GOODDAY_BOT_USER_ID
+  // gets found in the first place, so requiring it here was circular.
   if (WHOAMI) return whoami();
+  if (!report.ready) die("Required env missing. Copy .dev.vars.example to .dev.vars and fill it in.");
 
   if (!RUN) {
     console.log("\n  Dry run. With --run this would:");

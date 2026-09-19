@@ -155,7 +155,16 @@ async function goodDayDeleteTask(env, taskId) {
 async function goodDayComment(env, taskId, text, attachments) {
   try {
     const body = { userId: env.GOODDAY_BOT_USER_ID, message: text };
-    if (Array.isArray(attachments) && attachments.length) body.attachments = attachments;
+    // `attachments` must be an array of OBJECTS, not of fileId strings. Passing
+    // bare ids returns 400 "dictionary update sequence element #0 has length 1;
+    // 2 is required", which is not a helpful message and cost real time once.
+    // Bare strings are accepted here and normalised, so callers cannot get it
+    // wrong twice.
+    if (Array.isArray(attachments) && attachments.length) {
+      body.attachments = attachments.map((a) =>
+        typeof a === "string" ? { fileId: a, name: "attachment", mime: "application/octet-stream" } : a
+      );
+    }
     const res = await gdCall(env, "POST", `/task/${taskId}/comment`, body);
     return res.ok;
   } catch (e) { return false; }
@@ -197,7 +206,9 @@ async function goodDaySetStatus(env, taskId, projectId, desiredSubstring, messag
     if (!hit) return false;
     const body = { userId: env.GOODDAY_BOT_USER_ID, statusId: hit.id };
     if (message) body.message = message;
-    const res = await gdCall(env, "POST", `/task/${taskId}/status`, body);
+    // PUT, not POST. The published docs say POST and POST returns 405
+    // "method is not allowed". Verified against the live API 2026-09-19.
+    const res = await gdCall(env, "PUT", `/task/${taskId}/status`, body);
     return res.ok;
   } catch (e) { return false; }
 }
@@ -226,7 +237,9 @@ async function goodDayUploadFile(env, filename, bytes, contentType = "applicatio
     body: bytes
   });
   if (!put.ok) throw new Error(`GoodDay file PUT failed: ${put.status} ${await gdErrText(put)}`);
-  return slot.fileId;
+  // Returns the whole descriptor, not just the id, because `attachments` wants
+  // objects. See the comment in goodDayComment.
+  return { fileId: slot.fileId, name: slot.name || filename, mime: slot.mime || contentType };
 }
 
 // Mirrors clickupAttachPdf(env, taskId, filename, pdfBytes).
@@ -237,10 +250,10 @@ async function goodDayUploadFile(env, filename, bytes, contentType = "applicatio
 // attaches to a COMMENT, so every render can be posted as its own dated entry
 // and the history is complete. The restriction can be lifted once this is live.
 async function goodDayAttachPdf(env, taskId, filename, pdfBytes, note) {
-  const fileId = await goodDayUploadFile(env, filename, pdfBytes, "application/pdf");
-  const ok = await goodDayComment(env, taskId, note || filename, [fileId]);
+  const file = await goodDayUploadFile(env, filename, pdfBytes, "application/pdf");
+  const ok = await goodDayComment(env, taskId, note || filename, [file]);
   if (!ok) throw new Error(`GoodDay attach failed: comment rejected for task ${taskId}`);
-  return { fileId };
+  return file;
 }
 
 // ---------------------------------------------------------------------------
