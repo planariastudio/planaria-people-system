@@ -1,10 +1,76 @@
 # GoodDay automations for the People System
 
-Runbook for the rules that replace ClickUp's 43. Written 2026-09-19, before any
-of them exist. Build them in this order, verify each one before starting the next.
+Runbook for the rules that replace ClickUp's 43.
 
 Pairs with `CLICKUP_AUTOMATIONS.md`, which documents what is being replaced, and
 with §15 of `CLAUDE.md`, which documents the code side.
+
+---
+
+## 0. BUILT. What is actually live, as of 2026-09-19
+
+**All five rules exist and are enabled.** Do not build them. Read this section
+before touching anything, or you will create a second set: the sections below
+were written before they existed and still read as build instructions.
+
+Open one with `https://www.goodday.work/automation/<ID>`.
+
+| | ID | Trigger | Action required | Notification |
+|---|---|---|---|---|
+| P1 | `jtAquC` | Task created | Assigned to user | Assigned to user |
+| P2 | `vFlgxh` | status → `Locked` | Rashy | Joshua + Rashy |
+| P3 | `qps6uM` | status → `Filed` | No action required | Assigned to user |
+| P4 | `D32a3j` | Task created | Assigned to user | Assigned to user |
+| P5 | `Ad3FRZ` | Task created | Rashy | Joshua + Rashy |
+
+All five are scoped to **Project → Performance Records → Apply to subfolders**,
+which is what makes them reach the per-person projects underneath. Cascade is off
+on all of them.
+
+The statuses they watch, created 2026-09-19 (ids from `GET /statuses`):
+
+```
+Self review open  CaTCiL    Peer rating open  zvwRy1    PIP open    2qt2ip
+Locked            0Ns2vR    Peer submitted    pQTQ8W    PIP closed  bgaCOf
+Filed             lVa21x
+```
+
+### Three ways the built rules differ from the spec below, and why
+
+**P1, P4 and P5 trigger on `Task created`, not on a status.** The statuses did
+not exist when the rules were built. It also happens to be better for P1 and P4:
+the Worker creates the task at exactly the moment the work becomes real, so a
+status round-trip would add a step and change nothing. Leave them.
+
+**Action Required takes exactly ONE user.** The picker is single-select, no
+checkboxes, unlike the notification picker which takes several. So "Action
+required → Rashy, Joshua" in the P2 and P5 recipes below is not achievable.
+Rashy is the single action-required user; both are on the notification. That is
+the better split anyway: one person owns it, both can see it.
+
+**`Self review open`, `Peer rating open` and `Peer submitted` are currently
+unused**, because P1 and P4 fire on creation instead. They exist and are on the
+workflow, but nothing sets them until something does.
+
+### Still missing
+
+**PIP closed has no rule.** P5 fires on `Task created`, so it covers a PIP
+opening and nothing at all when one closes. ClickUp rule `3.2` has no
+replacement. Adding a second trigger to P5 would also re-set Action Required to
+Rashy on close, which is wrong, so this wants a sixth rule rather than an edit.
+
+### Two traps found while building these
+
+**Check "Apply to subfolders" on every rule.** P5 was saved with it OFF while
+the other four had it on. Scoped to `Performance Records` without it, a rule
+never fires, because every task lives in a person's sub-project and not in the
+folder itself. It fails silently and looks exactly like a rule that is simply
+not working.
+
+**A newly added action accepts real keystrokes even on a saved rule.** The
+standing note is that a saved rule's message editor rejects them. Both are true:
+the distinction is the *action*, not the rule. Adding a fresh notification action
+to a long-saved rule and typing its body works fine.
 
 ---
 
