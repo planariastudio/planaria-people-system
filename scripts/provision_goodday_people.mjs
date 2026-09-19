@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+//
+// Provision the per-person structure for the People System in GoodDay.
+//
+// Builds, under the People workspace:
+//
+//   People                       (GOODDAY_PEOPLE_ID, must already exist)
+//     Team                       created if missing
+//       <person>                 one project per roster entry
+//       <person>
+//       ...
+//
+// One project per person rather than a folder of four lists. That is what makes
+// per-person access work: grant someone their project and they see their own
+// record and nobody else's. It is also what makes the embedded KPI form safe,
+// because the embed on their project carries their token and only they and the
+// leads can open it.
+//
+// The roster is read from the LIVE worker config, not from a hardcoded list, so
+// this cannot drift from what the forms use.
+//
+//   node scripts/provision_goodday_people.mjs --dry-run
+//   node scripts/provision_goodday_people.mjs --apply
+//
+// Env:
+//   GOODDAY_TOKEN         required   (never pass this on the command line)
+//   GOODDAY_BOT_USER_ID   required
+//   GOODDAY_PEOPLE_ID     required   the People workspace id
+//   GOODDAY_PROJECT_TEMPLATE_ID  optional, passed straight through
+//   WORKER_BASE           optional   defaults to the live worker
+//
+// Safe to re-run. Every create goes through goodDayGetOrCreateProject, which
+// looks the name up under its parent first. GoodDay will happily create a second
+// project with the same name, so a blind create is NOT idempotent -- that lookup
+// is what stops a half-failed run leaving duplicates behind.
+
+import {
+  goodDayGetOrCreateProject,
+  goodDayFindProjectByName,
+  goodDaySubProjects,
+  goodDayEnvReport
+} from "../worker/goodday.js";
+
+const WORKER_BASE = process.env.WORKER_BASE
+  || "https://planaria-people-worker.planariastudio.workers.dev";
+
+const APPLY = process.argv.includes("--apply");
+const DRY = !APPLY;
+
+const env = {
+  GOODDAY_TOKEN: process.env.GOODDAY_TOKEN,
+  GOODDAY_BOT_USER_ID: process.env.GOODDAY_BOT_USER_ID,
+  GOODDAY_PEOPLE_ID: process.env.GOODDAY_PEOPLE_ID,
+  GOODDAY_PROJECT_TEMPLATE_ID: process.env.GOODDAY_PROJECT_TEMPLATE_ID
+};
+
+function die(msg) {
+  console.error("\n  " + msg + "\n");
+  process.exit(1);
+}
+
+async function fetchRoster() {
+  const res = await fetch(`${WORKER_BASE}/config`);
+  if (!res.ok) die(`Could not read ${WORKER_BASE}/config (${res.status})`);
+  const cfg = await res.json();
+  const roster = Array.isArray(cfg.roster) ? cfg.roster : [];
+  if (!roster.length) die("The live config returned an empty roster. Refusing to provision nothing.");
+  return { roster, version: cfg.version };
+}
+
+// A person's project is named by their roster `id`, which is the short name the
+// rest of the system already keys on ("Eduardus Kent", not the full legal name).
+// Keeping that identical everywhere is what lets a later script match a project
+// back to a roster row without a second mapping table.
+const projectNameFor = (p) => String(p.id || p.name || "").trim();
+
+async function main() {
+  console.log("\nGoodDay People provisioning");
+  console.log("  mode        " + (DRY ? "DRY RUN (nothing will be created)" : "APPLY"));
+  console.log("  worker      " + WORKER_BASE);
+
+  const report = goodDayEnvReport(env);
+  const missing = report.required.filter((r) => !r.present).map((r) => r.name);
+  if (!env.GOODDAY_PEOPLE_ID) missing.push("GOODDAY_PEOPLE_ID");
+  if (missing.length) {
+    die("Missing env: " + missing.join(", ")
+      + "\n  Set them in your shell for this run. Do not commit them."
+      + "\n  The worker's own copy belongs in `wrangler secret put`.");
+  }
+
+  const { roster, version } = await fetchRoster();
+  console.log("  roster      " + roster.length + " people (config " + version + ")");
+
+  // Supervisors do not get a performance record of their own here. If that
+  // changes, drop this filter rather than editing the roster.
+  const people = roster.filter((p) => String(p.level || "").toLowerCase() !== "supervisor");
+  const skipped = roster.length - people.length;
+  console.log("  provisioning " + people.length + " (" + skipped + " supervisor rows skipped)");
+
+  if (DRY) {
+    console.log("\n  Would ensure:");
+    console.log("    People (" + env.GOODDAY_PEOPLE_ID + ")");
+    console.log("      Team");
+    for (const p of people) console.log("        " + projectNameFor(p) + "   [" + (p.level || "?") + "]");
+    console.log("\n  Nothing was created. Re-run with --apply to make these.\n");
+    return;
+  }
+
+  // --- Team folder ---------------------------------------------------------
+  const team = await goodDayGetOrCreateProject(env, "Team", env.GOODDAY_PEOPLE_ID);
+  if (!team || !team.id) die("Could not create or find the Team project under People.");
+  console.log("\n  Team -> " + team.id);
+
+  // --- one project per person ---------------------------------------------
+  const existing = await goodDaySubProjects(env, team.id);
+  const had = new Set(existing.map((p) => String(p.name).trim().toLowerCase()));
+
+  let made = 0, reused = 0, failed = 0;
+  for (const p of people) {
+    const name = projectNameFor(p);
+    if (!name) { console.log("    SKIP  roster row with no id or name"); failed++; continue; }
+    try {
+      const proj = await goodDayGetOrCreateProject(env, name, team.id);
+      const wasThere = had.has(name.toLowerCase());
+      if (wasThere) { reused++; console.log("    reuse " + name + "  -> " + proj.id); }
+      else { made++; console.log("    NEW   " + name + "  -> " + proj.id); }
+    } catch (e) {
+      failed++;
+      console.log("    FAIL  " + name + "  -> " + e.message);
+    }
+  }
+
+  console.log("\n  created " + made + ", reused " + reused + ", failed " + failed);
+
+  // Re-read and compare, rather than trusting the loop's own bookkeeping. This is
+  // the check that catches a duplicate created by a racing or retried run.
+  const after = await goodDaySubProjects(env, team.id);
+  const counts = new Map();
+  for (const p of after) {
+    const k = String(p.name).trim().toLowerCase();
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const dupes = [...counts.entries()].filter(([, n]) => n > 1);
+  if (dupes.length) {
+    console.log("\n  WARNING duplicate projects under Team, delete the extras by hand:");
+    for (const [name, n] of dupes) console.log("    " + name + " x" + n);
+  } else {
+    console.log("  verified  " + after.length + " projects under Team, no duplicates");
+  }
+
+  console.log("\n  Next, by hand (there is no Views endpoint in the API):");
+  console.log("    - add an Embed View on each person's project pointing at their KPI link");
+  console.log("    - grant each person access to their own project only");
+  console.log("    - check People stays on Project-based access, never All Projects\n");
+}
+
+main().catch((e) => die(e.stack || e.message));

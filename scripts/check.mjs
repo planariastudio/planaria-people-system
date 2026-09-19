@@ -7,7 +7,7 @@
 // fed over stdin, which is what this script does for the worker.
 //
 // Categories:
-//   - worker/index.js        -> ESM check via stdin (the reliable path)
+//   - worker/*.js (ESM)       -> ESM check via stdin (the reliable path)
 //   - kpi_card.js/peer_card.js/draft.js -> classic scripts (IIFE), plain --check
 //   - *.html inline <script>  -> classic scripts, extracted and plain --check
 import { readFileSync, writeFileSync, mkdtempSync, readdirSync } from "node:fs";
@@ -21,10 +21,12 @@ const ok = (m) => console.log("  ok   " + m);
 const fail = (m, detail) => { failures++; console.log("FAIL   " + m + (detail ? "\n" + detail : "")); };
 
 // 1. Worker — ESM syntax check over stdin (the check that actually catches errors here).
-{
-  const src = readFileSync("worker/index.js", "utf8");
+//    goodday.js is ESM too (it has top-level export), so it needs the same path.
+//    Plain --check would falsely pass on it for exactly the reason in the header.
+for (const f of ["worker/index.js", "worker/goodday.js"]) {
+  const src = readFileSync(f, "utf8");
   const r = spawnSync(node, ["--input-type=module", "--check"], { input: src, encoding: "utf8" });
-  r.status === 0 ? ok("worker/index.js (ESM)") : fail("worker/index.js (ESM)", (r.stderr || "").slice(0, 500));
+  r.status === 0 ? ok(f + " (ESM)") : fail(f + " (ESM)", (r.stderr || "").slice(0, 500));
 }
 
 // 2. Shared browser modules — classic scripts, plain --check is reliable (no import/export).
