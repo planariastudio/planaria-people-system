@@ -104,11 +104,21 @@ async function main() {
   const { roster, version } = await fetchRoster();
   console.log("  roster      " + roster.length + " people (config " + version + ")");
 
-  // Supervisors do not get a performance record of their own here. If that
-  // changes, drop this filter rather than editing the roster.
-  const people = roster.filter((p) => String(p.level || "").toLowerCase() !== "supervisor");
-  const skipped = roster.length - people.length;
-  console.log("  provisioning " + people.length + " (" + skipped + " supervisor rows skipped)");
+  // Everyone in the roster gets a project, supervisors included. The filter that
+  // used to skip them is gone, on its own instruction: "if that changes, drop this
+  // filter rather than editing the roster."
+  //
+  // Two reasons it changed. The KPI rubric carries a fully written `supervisor`
+  // column -- real targets, not placeholders -- so the instrument was always meant
+  // to assess them; skipping them here was the outlier. And being in the roster
+  // without a project is a silent hole: the case is created, the task has nowhere
+  // to live, and nobody finds out until someone opens an empty record.
+  //
+  // Being scored and doing the scoring are separate things. Scoring rights come
+  // from the `supervisors` list in Config_Lists, not from this level, so a
+  // supervisor with a project of their own keeps every right they had.
+  const people = roster;
+  console.log("  provisioning " + people.length + " (everyone in the roster)");
 
   if (DRY) {
     console.log("\n  Would ensure:");
