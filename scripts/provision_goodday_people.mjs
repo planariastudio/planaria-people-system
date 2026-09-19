@@ -85,7 +85,17 @@ async function fetchRoster() {
 // rest of the system already keys on ("Eduardus Kent", not the full legal name).
 // Keeping that identical everywhere is what lets a later script match a project
 // back to a roster row without a second mapping table.
-const projectNameFor = (p) => String(p.id || p.name || "").trim();
+// The roster's `name`, not its `id`. The id is a short slug ("Eduardus Kent",
+// "Richo Darma") that exists to be a stable key, and naming projects after it
+// meant the sidebar disagreed with the roster everywhere else in the system.
+// The full name is what people are called in the forms, the PDFs and the Sheet,
+// so it is what their project should say.
+//
+// Changing this renames what goodDayGetOrCreateProject looks up, so the existing
+// short-named projects were renamed to match in the same change. If you ever
+// change it again, rename the live projects too, or the next run creates a
+// second set alongside the first rather than reusing them.
+const projectNameFor = (p) => String(p.name || p.id || "").trim();
 
 async function main() {
   console.log("\nGoodDay People provisioning");
