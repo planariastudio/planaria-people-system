@@ -34,6 +34,7 @@
 // project with the same name, so a blind create is NOT idempotent -- that lookup
 // is what stops a half-failed run leaving duplicates behind.
 
+import { readFileSync, existsSync } from "node:fs";
 import {
   goodDayGetOrCreateProject,
   goodDayFindProjectByName,
@@ -47,12 +48,24 @@ const WORKER_BASE = process.env.WORKER_BASE
 const APPLY = process.argv.includes("--apply");
 const DRY = !APPLY;
 
-const env = {
-  GOODDAY_TOKEN: process.env.GOODDAY_TOKEN,
-  GOODDAY_BOT_USER_ID: process.env.GOODDAY_BOT_USER_ID,
-  GOODDAY_PEOPLE_ID: process.env.GOODDAY_PEOPLE_ID,
-  GOODDAY_PROJECT_TEMPLATE_ID: process.env.GOODDAY_PROJECT_TEMPLATE_ID
-};
+// .dev.vars is where these live, per .dev.vars.example: "the scripts in this repo
+// read it too so there is one place to look". preflight, structure and smoke all
+// did. This one read process.env alone, so it reported every variable missing on
+// a machine that was correctly set up, right after preflight had passed on the
+// same shell. Shell env still wins, for a one-off override.
+function loadDevVars() {
+  const out = {};
+  if (!existsSync(".dev.vars")) return out;
+  for (const line of readFileSync(".dev.vars", "utf8").split(/\r?\n/)) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(line);
+    if (m && m[2] !== "") out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+const env = { ...loadDevVars(), ...Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => k.startsWith("GOODDAY_") && process.env[k])
+) };
 
 function die(msg) {
   console.error("\n  " + msg + "\n");

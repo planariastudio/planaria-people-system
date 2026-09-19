@@ -75,10 +75,23 @@ async function goodDayResolveUserId(env, nameOrEmail) {
     if (byEmail) return byEmail.id;
     const byName = users.find((u) => norm(u.name) === want);
     if (byName) return byName.id;
-    // Last resort: a unique prefix match, so "Eduardus Kent" finds
-    // "Eduardus Kent Sutanza". Ambiguous prefixes resolve to nothing rather
-    // than to the wrong person.
-    const hits = users.filter((u) => norm(u.name).startsWith(want));
+    // Last resort: a unique prefix match, in EITHER direction. The roster and
+    // GoodDay disagree about how much of a name to store, and they disagree in
+    // both directions: roster "Eduardus Kent" against GoodDay "Eduardus Kent
+    // Sutanza", but also roster "Joshua Ervin Novaldi" against GoodDay "Joshua
+    // Ervin". Testing only startsWith(want) caught the first and silently missed
+    // the second, which is how the account that owns the workspace resolved to
+    // null. A null here means the task is created unassigned and nobody is told
+    // they have work, so the failure is invisible until someone asks why they
+    // never got their review.
+    //
+    // Still requires exactly one hit: "Test Josh" and "Test 2" both live in this
+    // workspace, so an ambiguous match must resolve to nothing rather than to
+    // whichever happened to be first.
+    const hits = users.filter((u) => {
+      const have = norm(u.name);
+      return have && (have.startsWith(want) || want.startsWith(have));
+    });
     return hits.length === 1 ? hits[0].id : null;
   } catch (e) { return null; }
 }
