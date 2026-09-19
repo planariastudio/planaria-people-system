@@ -35,6 +35,27 @@ Locked            0Ns2vR    Peer submitted    pQTQ8W    PIP closed  bgaCOf
 Filed             lVa21x
 ```
 
+### Proven live: rules DO fire on API-created tasks
+
+Section 1 below calls this blocking and says to test it before building anything
+on top. It is now tested. A KPI Scorecard task created through `POST /tasks` in a
+person's project had `actionRequiredUserId` set by P1 **within 4 seconds**, and
+`Assigned to user` resolved to the real assignee.
+
+```
+created sCxsk0  assignee tJJs1d
++4s  actionRequiredUserId = tJJs1d
+```
+
+So the division of labour holds: the Worker creates the task and sets the status
+through the API, and a rule picks it up and sets Action Required. The thing the
+API cannot write, an automation writes for it.
+
+What is still unproven is whether Action Required also produces a **notification**
+a person actually sees. That needs a human to look at their own GoodDay, and it
+is why every rule now carries an explicit notification action rather than relying
+on Action Required alone to be noticed.
+
 ### Three ways the built rules differ from the spec below, and why
 
 **P1, P4 and P5 trigger on `Task created`, not on a status.** The statuses did
