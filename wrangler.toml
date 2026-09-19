@@ -15,9 +15,12 @@
 name = "planaria-people-worker"
 main = "worker/index.js"
 
-# Match the date shown in the dashboard's Settings → Compatibility. This is a
-# recent, browser-rendering-safe default; change it only to match the live worker.
-compatibility_date = "2024-09-23"
+# Match the date shown in the dashboard's Settings → Compatibility.
+# VERIFIED against the live worker 2026-09-19: dashboard reads 2026-07-09.
+# The previous value here was 2024-09-23, which would have rolled the runtime
+# back nearly two years on the first `wrangler deploy`. Do not change it without
+# re-checking the dashboard.
+compatibility_date = "2026-07-09"
 
 # The worker imports `node:buffer`; nodejs_compat is required for it to run.
 compatibility_flags = ["nodejs_compat"]

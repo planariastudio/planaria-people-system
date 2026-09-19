@@ -63,6 +63,14 @@
         '</div></div>';
     }).join('') || '<p class="none">No focus areas recorded.</p>';
 
+    /* Supervisor's written assessment. Only rendered when present -- cases filed
+       before this was carried through have no spv_summary and must not show an
+       empty block. */
+    var sumHtml = (p.spv_summary || []).filter(function (s) { return s && s.text; }).map(function (s) {
+      return '<div class="srow"><div class="sk">' + esc(s.label) + '</div>' +
+        '<div class="sv">' + esc(s.text) + '</div></div>';
+    }).join('');
+
     var gap = (p.self_overall != null && p.official_kpi != null)
       ? (p.self_overall - p.official_kpi >= 0 ? '+' : '') + f2(p.self_overall - p.official_kpi)
       : null;
@@ -88,6 +96,7 @@
       '<div class="scorekey"><span><i class="k-self"></i> Self — calibration only</span>' +
       '<span><i class="k-spv"></i> Supervisor — the KPI of record</span></div>' +
       (catHtml || '<p class="none">No category data.</p>') + '</div>' +
+      (sumHtml ? '<div class="section"><div class="stitle">Supervisor written assessment</div>' + sumHtml + '</div>' : '') +
       '<div class="section"><div class="stitle">Focus for next quarter</div>' + focusHtml + '</div>' +
       '<div class="foot">Official record · supervisor rating is the KPI of record; self-assessment is calibration only. Case <b>' + esc(p.id || '') + '</b>.</div>' +
       '</div>';
@@ -171,6 +180,13 @@
     '.kpicard .mp-k{display:block;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#6b7280);margin-bottom:1px}',
     '.kpicard .mp-empty{color:var(--muted,#6b7280);font-style:italic}',
     '@media(max-width:640px){.kpicard .mpanels{grid-template-columns:1fr}}',
+    /* supervisor's narrative verdict -- indigo key, same "supervisor = indigo"
+       language as .mp.spv above. pre-wrap because these come from textareas and
+       the paragraph breaks the supervisor typed are part of the record. */
+    '.kpicard .srow{border:1px solid var(--line,#e6e8eb);border-radius:10px;padding:13px 16px;margin-bottom:10px}',
+    '.kpicard .srow:last-child{margin-bottom:0}',
+    '.kpicard .sk{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--kpi,#4f46e5);margin-bottom:5px}',
+    '.kpicard .sv{font-size:13px;line-height:1.6;white-space:pre-wrap}',
     '.kpicard .frow{border:1px solid var(--line,#e6e8eb);border-radius:10px;padding:14px 16px;margin-bottom:10px}',
     '.kpicard .farea{font-weight:650;font-size:14px;display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}',
     '.kpicard .pri{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:5px}',

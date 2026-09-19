@@ -133,6 +133,9 @@
   <button class="btn primary hidden" id="submitBtn" onclick="submitForm()" disabled>Preview &amp; submit</button>
 </div></div>
 
+<!-- keeps an in-progress rating alive across a refresh; nothing is saved
+     server-side until Submit -->
+<script src="draft.js"></script>
 <script>
 /* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
@@ -170,6 +173,12 @@ async function loadConfig(){
   ALLVALUES=CLUSTERS.flatMap(c=>c.values.map(v=>v.label));
 }
 const RATER_TOKEN=new URLSearchParams(location.search).get('t')||null;
+// When a link was minted for one specific pairing (links_admin's per-assignment
+// "Add task in ClickUp"), the target + cycle are baked into the URL so the rater
+// never has to pick from a dropdown -- see applyDeepLinkTarget() in boot(). A
+// bare personal link (no target param) still falls back to the full picker.
+const TARGET_PARAM=new URLSearchParams(location.search).get('target')||null;
+const CYCLE_PARAM=new URLSearchParams(location.search).get('cycle')||null;
 const state={ratings:{},target:'',target_id:'',level:'',cycle:'',track_reco:null};
 let STEPS=['0','written','review'];
 let cur=0;
@@ -200,7 +209,9 @@ function buildClusterCards(){
 const tgt=document.getElementById('target');
 tgt.onchange=function(){var o=tgt.selectedOptions[0];var changed=state.target&&state.target!==tgt.value;state.target=tgt.value;state.target_id=o?o.dataset.slug:'';state.level=o?o.dataset.lvl:'';
   if(changed)resetRatings(); // never carry one peer's ratings into another's form
-  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span> <span class="guide" style="display:inline">&rarr; click <b>Next</b> to rate them across each value.</span>':'';paintAnchors();validate();};
+  document.getElementById('tlvl').innerHTML=state.level?'<span class="lvlpill">'+LVLNAME[state.level]+'</span> <span class="guide" style="display:inline">&rarr; click <b>Next</b> to rate them across each value.</span>':'';paintAnchors();validate();
+  restoreDraft(); // target is only known now, so this is the first point a draft can be matched
+};
 function resetRatings(){
   state.ratings={};state.track_reco=null;
   document.getElementById('key_strength').value='';document.getElementById('constructive').value='';
@@ -208,9 +219,64 @@ function resetRatings(){
   document.querySelectorAll('.sc.sel').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
   document.querySelectorAll('.trk-opt.sel').forEach(function(x){x.classList.remove('sel');});
 }
+
+/* ===== draft (see draft.js) =====
+   One draft per peer per cycle: a rater works through several people, and each
+   sitting is its own piece of work. Switching target must never surface the
+   previous peer's ratings, which is exactly what keying on target+cycle buys. */
+function draftKey(){
+  var who=state.target_id||state.target;
+  return (who&&state.cycle)?('peer.'+who+'.'+state.cycle):'';
+}
+function draftSnapshot(){
+  return {ratings:Object.assign({},state.ratings),track_reco:state.track_reco,cur:cur,
+    key_strength:document.getElementById('key_strength').value,
+    constructive:document.getElementById('constructive').value};
+}
+var saveDraft=window.DRAFT?DRAFT.writer(draftKey,draftSnapshot):function(){};
+function clearDraft(){if(window.DRAFT)DRAFT.clear(draftKey());}
+/* The 1-5 buttons carry their selected look in classes and inline styles set by
+   the click handler, not re-derived from state on paint -- so restoring the
+   numbers alone would leave every button looking unpicked. Replay the visual. */
+function paintRatings(){
+  document.querySelectorAll('.sc').forEach(function(b){
+    var n=state.ratings[b.dataset.v],on=n===+b.dataset.n;
+    b.classList.toggle('sel',on);b.setAttribute('aria-pressed',on?'true':'false');
+    b.style.background=on?(n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)'):'';
+    b.style.color=on?(n===3?'#3d2c00':'#fff'):'';
+  });
+  document.querySelectorAll('.trk-opt').forEach(function(x){x.classList.toggle('sel',x.dataset.trk===state.track_reco);});
+}
+function restoreDraft(){
+  if(!window.DRAFT)return;
+  var k=draftKey();if(!k)return;
+  var d=DRAFT.load(k);if(!d)return;
+  state.ratings=d.ratings||{};state.track_reco=d.track_reco||null;
+  document.getElementById('key_strength').value=d.key_strength||'';
+  document.getElementById('constructive').value=d.constructive||'';
+  paintRatings();
+  cur=Math.max(0,Math.min(STEPS.length-1,+d.cur||0));
+  paintAnchors();paint();validate();
+  var el=document.getElementById('tnote');
+  if(el)el.innerHTML='<b>Picked up where you left off</b> — restored your unsaved answers for '+
+    state.target+' from '+DRAFT.ago(DRAFT.savedAt(k))+'. Nothing is submitted yet. '+
+    '<a href="#" id="draftDiscard">Start this one over</a>.';
+  var a=document.getElementById('draftDiscard');
+  if(a)a.addEventListener('click',function(e){
+    e.preventDefault();
+    if(!confirm('Throw away the restored answers for '+state.target+' and start over?'))return;
+    clearDraft();resetRatings();cur=0;paintAnchors();paint();validate();
+    var n=document.getElementById('tnote');if(n)n.innerHTML='';
+  });
+}
 var _cyQ=document.getElementById('cycleQ'),_cyY=document.getElementById('cycleY'),_cyH=document.getElementById('cycle');
 function _composeCycle(){state.cycle=(_cyQ.value&&_cyY.value.length===4)?(_cyQ.value+' '+_cyY.value):'';_cyH.value=state.cycle;validate();}
-(function(){var n=new Date();_cyQ.value='Q'+(Math.floor(n.getMonth()/3)+1);_cyY.value=String(n.getFullYear());_composeCycle();})();
+(function(){
+  var m=CYCLE_PARAM&&/^Q([1-4])\s+(\d{4})$/.exec(CYCLE_PARAM.trim());
+  if(m){_cyQ.value='Q'+m[1];_cyY.value=m[2];}
+  else{var n=new Date();_cyQ.value='Q'+(Math.floor(n.getMonth()/3)+1);_cyY.value=String(n.getFullYear());}
+  _composeCycle();
+})();
 _cyY.addEventListener('input',function(){_cyY.value=_cyY.value.replace(/\D/g,'').slice(0,4);_composeCycle();loadAssignments();});
 _cyQ.addEventListener('change',function(){_composeCycle();loadAssignments();});
 
@@ -253,13 +319,20 @@ function loadAssignments(){
     .then(function(r){return r.json();})
     .then(function(j){
       if(cyc!==state.cycle)return;           // a later cycle change already superseded this
-      if(!j||!j.found){fillTargets(rosterAll(),'');return;}
+      if(!j||!j.found){ if(TARGET_PARAM){showTargetNotFound();}else{fillTargets(rosterAll(),'');} return;}
       ASSIGN_STATE=j;
       var byName={};ROSTER.forEach(function(r){byName[r[0]]={name:r[0],level:r[1],slug:r[2]};});
       var list=(j.assignments||[]).map(function(a){
         var m=byName[a.target]||{name:a.target,level:'',slug:''};
         return{name:m.name,level:m.level,slug:m.slug,done:a.done};
       });
+      // Deep link from a per-assignment ClickUp task -- go straight to rating
+      // this one person, no dropdown. See applyDeepLinkTarget().
+      if(TARGET_PARAM){
+        var match=list.find(function(p){return p.name===TARGET_PARAM;});
+        if(match){applyDeepLinkTarget(match);}else{showTargetNotFound();}
+        return;
+      }
       if(!list.length){
         fillTargets(rosterAll(),'<span class="tnote warn">No one is assigned to you for <b>'+cyc+'</b> yet — showing everyone. Check the cycle, or ask your admin to set your assignments.</span>');
         return;
@@ -270,7 +343,43 @@ function loadAssignments(){
         : '<span class="tnote">Assigned to you for <b>'+cyc+'</b>: '+list.length+' peer'+(list.length===1?'':'s')+' · '+open+' left to rate.</span>';
       fillTargets(list,note);
     })
-    .catch(function(){ fillTargets(rosterAll(),''); });
+    .catch(function(){ if(!TARGET_PARAM) fillTargets(rosterAll(),''); });
+}
+// This link was minted for exactly one pairing -- fill the (now hidden) picker
+// state directly and skip straight to the rating clusters. If they've already
+// rated this person this cycle, say so instead of re-showing the form.
+function applyDeepLinkTarget(match){
+  if(match.done){showAlreadyRated(match.name);return;}
+  fillTargets([match],'');
+  tgt.value=match.name;tgt.onchange();
+  lockPickerCard(match.name);
+  if(cur===0)go(1);
+}
+function lockPickerCard(name){
+  var card=document.querySelector('.card.step[data-step="0"]');
+  if(!card)return;
+  card.querySelector('.row2').style.display='none';
+  var locked=document.createElement('div');
+  locked.className='tnote ok';
+  locked.textContent='Rating '+name+' for '+state.cycle+'.';
+  card.appendChild(locked);
+}
+function showAlreadyRated(name){
+  hideNavAndPicker();
+  document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+    '<div class="card" style="text-align:center;padding:34px 24px"><div style="font-size:38px">✓</div>'+
+    '<p class="stitle" style="margin-top:8px">Already rated</p>'+
+    '<p class="sdesc">You’ve already rated <b>'+name+'</b> for <b>'+state.cycle+'</b>. Nothing left to do here.</p></div>');
+}
+function showTargetNotFound(){
+  hideNavAndPicker();
+  document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+    '<div class="card" style="text-align:center;padding:34px 24px"><p class="stitle">Assignment not found</p>'+
+    '<p class="sdesc">This link’s pairing isn’t on your list for this cycle anymore — it may have been removed. Ask your supervisor to resend it.</p></div>');
+}
+function hideNavAndPicker(){
+  document.querySelectorAll('.card.step').forEach(function(s){s.classList.remove('on');});
+  document.querySelector('.nav').style.display='none';
 }
 
 function paintAnchors(){
@@ -299,10 +408,12 @@ document.addEventListener('click',function(e){
   var b=e.target.closest('.sc');if(!b)return;
   var val=b.dataset.v,n=+b.dataset.n;state.ratings[val]=n;
   var grp=b.parentElement;grp.querySelectorAll('.sc').forEach(function(x){x.classList.remove('sel');x.style.background='';x.style.color='';x.setAttribute('aria-pressed','false');});
-  b.classList.add('sel');b.setAttribute('aria-pressed','true');b.style.background=n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)';b.style.color=n===3?'#3d2c00':'#fff';validate();
+  b.classList.add('sel');b.setAttribute('aria-pressed','true');b.style.background=n<=2?'var(--lo)':n===3?'var(--mid)':'var(--hi)';b.style.color=n===3?'#3d2c00':'#fff';validate();saveDraft();
 });
+// textareas and the track pills; the ratings above save from their own handler
+document.addEventListener('input',function(e){if(e.target.closest('#key_strength,#constructive'))saveDraft();});
 
-function go(dir){if(dir>0&&!canLeave(cur))return;cur=Math.max(0,Math.min(STEPS.length-1,cur+dir));paint();}
+function go(dir){if(dir>0&&!canLeave(cur))return;cur=Math.max(0,Math.min(STEPS.length-1,cur+dir));paint();saveDraft();}
 function paint(){
   document.querySelectorAll('.step').forEach(function(s){s.classList.remove('on');});
   document.querySelector('.step[data-step="'+STEPS[cur]+'"]').classList.add('on');
@@ -380,6 +491,7 @@ async function submitForm(){
     const r=await fetch(`${WORKER_URL}/submit/peer`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload())});
     const j=await r.json();
     if(!r.ok) throw new Error(j.error||r.status);
+    clearDraft(); // submitted and pooled; the draft can only be noise from here
     showDone(j);
   } catch(e){
     SUBMITTING=false;btn.disabled=false;btn.textContent='Preview & submit';
@@ -405,7 +517,7 @@ function showDone(j){
     loadAssignments(); // the peer just rated is now done -- re-narrow to who's left
   };
 }
-document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');});
+document.addEventListener('click',function(e){var b=e.target.closest('.trk-opt');if(!b)return;state.track_reco=b.dataset.trk;b.parentElement.querySelectorAll('.trk-opt').forEach(function(x){x.classList.remove('sel');});b.classList.add('sel');saveDraft();});
 function bootBanner(msg){
   var b=document.getElementById('bootBanner');
   if(!b){b=document.createElement('div');b.id='bootBanner';b.style.cssText='margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;color:#7c4a06;border-radius:10px;font-size:13px;line-height:1.5;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap';document.querySelector('.wrap').prepend(b);}
@@ -433,8 +545,10 @@ function boot(){
     STEPS=['0',...CLUSTERS.map((_,i)=>'c'+i),'written','review'];buildClusterCards();
     tgt.length=1; // reset to placeholder before repopulating (safe on retry)
     // Seed with the full roster so the form is usable immediately, then narrow to
-    // this rater's actual assignments once the Worker answers.
-    fillTargets(rosterAll(),'');
+    // this rater's actual assignments once the Worker answers. Skipped entirely
+    // for a deep link (TARGET_PARAM) -- no need to flash the full picker before
+    // applyDeepLinkTarget() replaces it a moment later.
+    if(!TARGET_PARAM) fillTargets(rosterAll(),'');
     paint();
     loadAssignments();
   }).catch(function(e){ bootBanner('Couldn’t reach the server — it may be waking up (first load can take ~10s). '+(e&&e.message?'('+e.message+') ':'')); });

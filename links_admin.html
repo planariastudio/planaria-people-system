@@ -67,19 +67,6 @@
   </div>
   <div id="bootBanner"></div>
 
-  <div class="section" style="--sa:var(--muted)">
-    <div class="seyebrow" style="--sa:#6b7280">System check</div>
-    <h2>Is everything connected?</h2>
-    <p class="lede">One read-only pass over the whole chain — Supabase tables and migrations, the live rubric config, your ClickUp token/space/lists, and the Sheet mirror. It creates and changes nothing. Run it after any deploy, or whenever something looks wrong.</p>
-    <div class="card">
-      <div class="row" style="align-items:center">
-        <button class="btn" id="selftestBtn" type="button">Run system check</button>
-        <span id="selftestSummary" class="lede" style="margin:0"></span>
-      </div>
-      <div id="selftestOut" style="margin-top:14px"></div>
-    </div>
-  </div>
-
   <div class="section" style="--sa:var(--kpi)">
     <div class="seyebrow">KPI</div>
     <h2>Personal links</h2>
@@ -135,6 +122,16 @@
         <tbody id="rows"></tbody>
       </table>
       <div id="emptyMsg" class="empty" hidden>No assignments yet for this cycle.</div>
+    </div>
+
+    <h2 style="margin-top:26px">Pooled scorecards</h2>
+    <p class="lede">The result <i>about</i> each person, once at least 2 raters have submitted — separate from the assignment rows above, which are just the planning. Same cycle as picked above.</p>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table>
+        <thead><tr><th>Target</th><th>Raters in</th><th></th></tr></thead>
+        <tbody id="scorecardRows"></tbody>
+      </table>
+      <div id="scorecardEmpty" class="empty" hidden>No pooled scorecards yet for this cycle.</div>
     </div>
   </div>
 
@@ -216,24 +213,6 @@ async function addPipLinkTask(){
   }catch(e){ errEl.textContent=e.message;errEl.hidden=false; }
   btn.disabled=false;btn.textContent='Create case';
 }
-async function runSelfTest(){
-  const btn=document.getElementById('selftestBtn'),out=document.getElementById('selftestOut'),sum=document.getElementById('selftestSummary');
-  btn.disabled=true;btn.textContent='Checking…';out.innerHTML='';sum.textContent='';
-  try{
-    const j=await api('/selftest');
-    const pill=s=>s==='pass'?'<span class="pill done">✓ pass</span>'
-      :s==='fail'?'<span class="pill fail">✕ fail</span>'
-      :s==='warn'?'<span class="pill" style="background:#fdf3e8;color:#7c4a06">! warn</span>'
-      :'<span class="pill pending">info</span>';
-    out.innerHTML='<table><thead><tr><th style="width:190px">Check</th><th style="width:90px">Result</th><th>Detail</th></tr></thead><tbody>'+
-      j.checks.map(c=>`<tr><td><b>${c.name}</b></td><td>${pill(c.status)}</td><td style="color:var(--muted)">${c.detail||''}</td></tr>`).join('')+
-      '</tbody></table>';
-    sum.innerHTML=j.ok
-      ? `<b style="color:var(--hi)">All good.</b> ${j.warned?j.warned+' warning(s) — optional features only.':'No warnings.'}`
-      : `<b style="color:var(--lo)">${j.failed} check(s) failed.</b> Fix those before trusting the system.`;
-  }catch(e){ out.innerHTML=`<div class="err">Couldn't run the check: ${e.message}</div>`; }
-  btn.disabled=false;btn.textContent='Run system check';
-}
 // Small non-blocking confirmation of where a ClickUp task actually landed.
 // ClickUp's own UI can lag a few seconds before a new task shows up, so this
 // also tells you it definitely exists rather than leaving you refreshing.
@@ -313,12 +292,14 @@ async function loadKpiTracker(){
     </tr>`).join('');
   tbody.querySelectorAll('.kpiDelBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm(`Remove case ${id}?\n\nThis deletes the case here AND its ClickUp task, so the two stay in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`))return;
+    if(!confirm(`Remove case ${id}?\n\nThis deletes the case here, its ClickUp task, and its row in the Sheet (KPI_Raw) if it was ever filed — everything stays in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days. The Sheet row does not have an equivalent undo.`))return;
     b.disabled=true;b.textContent='Removing…';
     try{
       const j=await api(`/kpi/cases/${encodeURIComponent(id)}`,{method:'DELETE'});
       await loadKpiTracker();
-      if(j.had_task&&!j.clickup_deleted)alert(`Case ${id} was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.`);
+      const problems=[];
+      if(j.had_task&&!j.clickup_deleted)problems.push('its ClickUp task could not be deleted — remove it in ClickUp by hand');
+      if(problems.length)alert(`Case ${id} was removed here, but ${problems.join('; ')}.`);
     }
     catch(e){ b.disabled=false;b.textContent='Remove'; alert('Failed to remove: '+e.message); }
   }));
@@ -361,7 +342,7 @@ async function loadPipTracker(){
   }).join('');
   tbody.querySelectorAll('.pipDelBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm(`Remove PIP case ${id}?\n\nThis deletes the case here AND its ClickUp task, so the two stay in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`))return;
+    if(!confirm(`Remove PIP case ${id}?\n\nThis deletes the case here, its ClickUp task, and its row in the Sheet (PIP_Raw) if it had one — everything stays in sync.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days. The Sheet row does not have an equivalent undo.`))return;
     b.disabled=true;b.textContent='Removing…';
     try{
       const j=await api(`/pip/cases/${encodeURIComponent(id)}`,{method:'DELETE'});
@@ -389,10 +370,9 @@ async function boot(){
   document.getElementById('bootBanner').innerHTML='';
   if(!WIRED){
     WIRED=true;
-    document.getElementById('cQ').addEventListener('change',loadRows);
-    document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4)loadRows();});
+    document.getElementById('cQ').addEventListener('change',()=>{loadRows();loadPeerScorecards();});
+    document.getElementById('cY').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,4);if(e.target.value.length===4){loadRows();loadPeerScorecards();}});
     document.getElementById('addBtn').addEventListener('click',addAssignment);
-    document.getElementById('selftestBtn').addEventListener('click',runSelfTest);
     document.getElementById('raterSel').addEventListener('change',refreshPairSelects);
     document.getElementById('targetSel').addEventListener('change',refreshPairSelects);
     document.getElementById('pipTaskBtn').addEventListener('click',addPipLinkTask);
@@ -401,8 +381,18 @@ async function boot(){
     const n=new Date();const q='Q'+(Math.floor(n.getMonth()/3)+1),y=String(n.getFullYear());
     document.getElementById('cQ').value=q;document.getElementById('cY').value=y;
     document.getElementById('kQ').value=q;document.getElementById('kY').value=y;
+    // A link from system_check.html carries ?cycle=Q4%202093 so its random test
+    // cycle is a click away instead of having to be typed in by hand -- without
+    // this, the Pooled scorecards / Case tracker panels just look empty for
+    // whatever quarter happens to be selected by default.
+    const cycleParam=new URLSearchParams(location.search).get('cycle');
+    const cm=cycleParam&&/^Q([1-4])\s+(\d{4})$/.exec(cycleParam.trim());
+    if(cm){
+      document.getElementById('cQ').value='Q'+cm[1];document.getElementById('cY').value=cm[2];
+      document.getElementById('kQ').value='Q'+cm[1];document.getElementById('kY').value=cm[2];
+    }
   }
-  await Promise.all([loadAllLinks(),loadRows(),loadKpiTracker(),loadPipTracker()]);
+  await Promise.all([loadAllLinks(),loadRows(),loadPeerScorecards(),loadKpiTracker(),loadPipTracker()]);
 }
 
 async function loadRows(){
@@ -416,7 +406,7 @@ async function loadRows(){
   const rows=data.assignments||[];
   if(!rows.length){tbody.innerHTML='';empty.hidden=false;empty.textContent='No assignments yet for this cycle.';return;}
   tbody.innerHTML=rows.map(a=>`
-    <tr data-id="${a.id}" data-rater="${a.rater_name}">
+    <tr data-id="${a.id}" data-rater="${a.rater_name}" data-completed="${a.completed?'1':''}">
       <td><b>${a.rater_name}</b></td>
       <td>${a.target_name}</td>
       <td><span class="status ${a.completed?'done':'pending'}">${a.completed?'✓ Submitted':'Pending'}</span></td>
@@ -430,23 +420,58 @@ async function loadRows(){
   tbody.querySelectorAll('.peerTaskBtn').forEach(b=>b.addEventListener('click',()=>addPeerLinkTask(b)));
   tbody.querySelectorAll('.delBtn').forEach(b=>b.addEventListener('click',async()=>{
     const tr=b.closest('tr');const id=tr.dataset.id;
-    if(!confirm('Remove this assignment?'))return;
-    try{ await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'}); tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';} }
+    // Completed assignments have a real submitted rating in the Sheet (Peer_Raw)
+    // -- removing the pairing deletes that too, not just the planning row, so
+    // this warning is meaningfully different from the "nothing submitted yet" case.
+    const msg=tr.dataset.completed
+      ? `Remove ${tr.dataset.rater}'s assignment to rate ${tr.children[1].textContent}?\n\nThis deletes the assignment here, its ClickUp task if one was created, and their submitted rating from the Sheet (Peer_Raw). This does not affect the pooled scores shown elsewhere if others also rated this person.\nThe ClickUp task goes to your workspace trash, where it can be restored for about 30 days.`
+      : `Remove this assignment?\n\nThis deletes it here and its ClickUp task if one was created. Nothing has been submitted for it yet.`;
+    if(!confirm(msg))return;
+    try{
+      const j=await api(`/peer/assignments/${encodeURIComponent(id)}`,{method:'DELETE'});
+      tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No assignments yet for this cycle.';}
+      if(j.clickup_deleted===false)alert('The assignment was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
+    }
+    catch(e){ alert('Failed to remove: '+e.message); }
+  }));
+}
+async function loadPeerScorecards(){
+  const cycle=currentCycle();
+  const tbody=document.getElementById('scorecardRows'),empty=document.getElementById('scorecardEmpty');
+  if(!cycle){tbody.innerHTML='';empty.hidden=false;empty.textContent='Pick a quarter and year.';return;}
+  tbody.innerHTML='<tr><td colspan="3" class="empty">Loading…</td></tr>';empty.hidden=true;
+  let data;
+  try{ data=await api(`/peer/scorecards?cycle=${encodeURIComponent(cycle)}`); }
+  catch(e){ tbody.innerHTML=`<tr><td colspan="3" class="empty">Failed to load: ${e.message}</td></tr>`; return; }
+  const rows=data.scorecards||[];
+  if(!rows.length){tbody.innerHTML='';empty.hidden=false;empty.textContent='No pooled scorecards yet for this cycle.';return;}
+  tbody.innerHTML=rows.map(s=>`
+    <tr data-target="${s.target}">
+      <td><b>${s.target}</b></td>
+      <td>${s.n}</td>
+      <td><button class="btn mini delBtn" type="button">Remove</button></td>
+    </tr>`).join('');
+  tbody.querySelectorAll('.delBtn').forEach(b=>b.addEventListener('click',async()=>{
+    const tr=b.closest('tr'),target=tr.dataset.target;
+    if(!confirm(`Remove ${target}'s pooled Peer Scorecard for ${cycle}?\n\nThis deletes the ClickUp scorecard task and every rater's submitted rating behind it (their individual assignment rows above are untouched, so it can be re-pooled from scratch if raters submit again). This does not affect any other cycle or any other person's scorecard.`))return;
+    try{
+      const j=await api(`/peer/scorecard?target=${encodeURIComponent(target)}&cycle=${encodeURIComponent(cycle)}`,{method:'DELETE'});
+      tr.remove(); if(!tbody.children.length){empty.hidden=false;empty.textContent='No pooled scorecards yet for this cycle.';}
+      if(j.clickup_deleted===false)alert('The scorecard was removed here, but its ClickUp task could not be deleted — remove it in ClickUp by hand.');
+    }
     catch(e){ alert('Failed to remove: '+e.message); }
   }));
 }
 async function addPeerLinkTask(btn){
-  const tr=btn.closest('tr'),rater=tr.dataset.rater,cycle=currentCycle();
+  const tr=btn.closest('tr'),id=tr.dataset.id,rater=tr.dataset.rater;
   btn.disabled=true;btn.textContent='Adding…';
   try{
-    const j=await api('/peer/create-link-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rater_name:rater,cycle})});
-    // One task per rater per cycle -- reload so every row for this rater (they may
-    // rate several people) reflects the same done state, not just this one button.
-    await loadRows();
-    // Say exactly where it went. The prompt lives in the person's To-do list, not
-    // their Peer list (which holds scorecards ABOUT them) -- without this, looking
-    // in the wrong list reads as "the button did nothing".
-    if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${j.folder_name||rater} › ${j.list_name}`,j.task_url);
+    // One task per (rater, target, cycle) pairing -- the link it carries is
+    // pre-scoped to exactly this row, so the rater never has to pick who they're
+    // rating when they open it (see peer_appraisal.html's target/cycle params).
+    const j=await api('/peer/create-assignment-task',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id})});
+    btn.disabled=true;btn.textContent='✓ Task added';
+    if(j.list_name)showTaskPlacement(`Task created in ClickUp → ${rater} › ${j.list_name}`,j.task_url);
   }catch(e){ btn.disabled=false;btn.textContent='Add task'; alert('Failed to create task: '+e.message); }
 }
 

@@ -8,7 +8,7 @@
 //
 // Categories:
 //   - worker/index.js        -> ESM check via stdin (the reliable path)
-//   - kpi_card.js/peer_card.js -> classic scripts (IIFE), plain --check
+//   - kpi_card.js/peer_card.js/draft.js -> classic scripts (IIFE), plain --check
 //   - *.html inline <script>  -> classic scripts, extracted and plain --check
 import { readFileSync, writeFileSync, mkdtempSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -28,7 +28,7 @@ const fail = (m, detail) => { failures++; console.log("FAIL   " + m + (detail ? 
 }
 
 // 2. Shared browser modules — classic scripts, plain --check is reliable (no import/export).
-for (const f of ["kpi_card.js", "peer_card.js"]) {
+for (const f of ["kpi_card.js", "peer_card.js", "draft.js"]) {
   const r = spawnSync(node, ["--check", f], { encoding: "utf8" });
   r.status === 0 ? ok(f) : fail(f, (r.stderr || "").slice(0, 500));
 }

@@ -189,12 +189,15 @@
 </style>
 <!-- result-card markup + styles, shared with kpi_result_card.html -->
 <script src="kpi_card.js"></script>
+<!-- keeps an in-progress sitting alive across a refresh; nothing here is saved
+     server-side until Lock (editor) or File (supervisor) -->
+<script src="draft.js"></script>
 <script>document.write('<style>'+window.KPICARD.css+'</style>');</script>
 </head>
 <body>
 
 <div class="wrap">
-  <div class="top"><h1>KPI Scorecard</h1></div>
+  <div class="top"><h1>KPI Scorecard</h1><a class="reflink" href="people_system_reference.html#kpi" target="_blank" rel="noopener">View full KPI Rubric ↗</a></div>
   <div id="ctxHost"></div>
   <div id="ctxErr" class="err" hidden>Select an editor to begin.</div>
   <div class="prog" id="progWrap"><div class="bar" role="progressbar" aria-label="Scorecard progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progBar"><div class="fill" id="fill" style="width:0%"></div></div><div class="lbl" id="progLbl">—</div></div>
@@ -313,6 +316,60 @@ function enterSupervisorGated(){
   $('spvPass').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
   $('spvPass').focus();
 }
+/* ===== draft (see draft.js) =====
+   Keyed per case AND per stage: the editor's sitting and the supervisor's are
+   different drafts of different work on the same case, and two supervisors on
+   one machine must never inherit each other's half-written assessment. No key
+   until a case id exists -- before that there is nothing worth restoring. */
+function draftKey(){return caseId?`kpi.${STAGE}.${caseId}`:'';}
+function draftSnapshot(){
+  return STAGE==='supervisor'
+    ? {stepIdx,spv:SP.spv,spvNote:SP.spvNote,foc:SP.foc,sum:SP.sum,extraFocus:SP.extraFocus}
+    : {stepIdx,self:ED.self,actual:ED.actual,selfNote:ED.selfNote,focus:ED.focus,sum:ED.sum};
+}
+const saveDraft=window.DRAFT?DRAFT.writer(draftKey,draftSnapshot):function(){};
+function clearDraft(){if(window.DRAFT)DRAFT.clear(draftKey());}
+/* Applied only from restoreDraft(), never automatically on load -- see rule 2 in
+   draft.js. Falls back to the live value for anything the draft doesn't carry,
+   so an older draft shape can't blank out fields it never knew about. */
+function applyDraft(d){
+  if(!d)return false;
+  if(STAGE==='supervisor'){
+    SP.spv=d.spv||{};SP.spvNote=d.spvNote||{};
+    SP.sum=d.sum||{};SP.extraFocus=d.extraFocus||[];
+    // keep supervisor focus rows aligned to however many the editor actually named
+    SP.foc=ED.focus.map((_,i)=>(d.foc&&d.foc[i])||{action:'',measure:'',priority:''});
+  }else{
+    ED.self=d.self||{};ED.actual=d.actual||{};ED.selfNote=d.selfNote||{};
+    if(d.focus&&d.focus.length)ED.focus=d.focus;
+    ED.sum=d.sum||{};
+  }
+  const total=TOTAL();
+  stepIdx=Math.min(Math.max(+d.stepIdx||0,0),total-1);
+  return true;
+}
+/* Offer, don't impose. Shows what was found and how old it is, with a way to
+   throw it away -- restoring silently is how someone ends up filing a card they
+   didn't realise was pre-filled. */
+function restoreDraft(){
+  if(!window.DRAFT)return;
+  const k=draftKey();if(!k)return;
+  const d=DRAFT.load(k);if(!d)return;
+  if(!applyDraft(d))return;
+  render();
+  setNote(`Picked up where you left off — restored your unsaved answers from <b>${DRAFT.ago(DRAFT.savedAt(k))}</b>. `+
+    `Nothing is filed yet. <a href="#" id="draftDiscard">Start this one over</a>.`);
+  const a=document.getElementById('draftDiscard');
+  if(a)a.addEventListener('click',e=>{
+    e.preventDefault();
+    if(!confirm('Throw away the restored answers and start this case from scratch?'))return;
+    clearDraft();
+    if(STAGE==='supervisor'){SP.spv={};SP.spvNote={};SP.sum={};SP.extraFocus=[];SP.foc=ED.focus.map(()=>({action:'',measure:'',priority:''}));}
+    else resetEditorScores();
+    stepIdx=0;setNote('');render();
+  });
+}
+
 function resetSupervisorPicker(){
   KPICASE=null;caseId='';loadedFromLink=false;SP.spv={};SP.spvNote={};SP.foc=[];SP.sum={};SP.extraFocus=[];stepIdx=0;
   buildCtx('supervisor');render();
@@ -393,6 +450,9 @@ async function maybeEditorId(){
       const j=await nr.json();caseId=j.id||'';$('idAuto').textContent=caseId||'—';setNote('');
     }
     renderEditorBlockState();
+    // caseId only exists once the lookup above resolves, so the draft can't be
+    // offered any earlier than this
+    if(!EDITOR_LOCKED_ELSEWHERE)restoreDraft();
   }catch(e){$('idAuto').textContent='—';}
 }
 function renderEditorBlockState(){
@@ -425,7 +485,7 @@ async function findOpenCaseForSpv(){
     const gr=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(oj.id)}`);const gj=await gr.json();
     if(!gj.found){setNote(`Case ${oj.id} could not be loaded — try again.`,'warn');return;}
     KPICASE=gj.case;caseId=oj.id;$('idAuto').textContent=caseId;
-    hydrateFromCase(KPICASE);render();
+    hydrateFromCase(KPICASE);render();restoreDraft();
   }catch(e){setNote('Lookup failed: '+e.message,'warn');}
 }
 function setNote(html,kind){let n=$('ctxNote');if(!n){n=document.createElement('div');n.id='ctxNote';n.className='note';$('ctxHost').appendChild(n);}if(!html){n.hidden=true;return;}n.hidden=false;n.className='note'+(kind==='warn'?' warn':'');n.innerHTML=html;}
@@ -441,6 +501,7 @@ function startSupervisor(){
   hydrateFromCase(KPICASE);
   $('employee').value=KPICASE.editor_name;setQuarter(KPICASE.quarter);$('idAuto').textContent=KPICASE.id;
   render();
+  if(!KPICASE.finalized)restoreDraft();
 }
 /* map stored editor_data into ED (read-only reference for the supervisor) */
 function hydrateFromCase(c){
@@ -603,12 +664,18 @@ function renderReview(){
 
 function wire(){
   const host=$('stageHost');
+  // one delegated pair rather than a saveDraft() call bolted onto each of the
+  // ~15 handlers below -- every textarea, input and select in the step bubbles
+  // through here, so nothing can be added later and quietly miss the draft
+  host.addEventListener('input',saveDraft);
+  host.addEventListener('change',saveDraft);
   host.querySelectorAll('.seg:not(.ro) button').forEach(b=>b.addEventListener('click',()=>{
     const{k,w,v}=b.dataset;const val=+v;const store=w==='self'?ED.self:SP.spv;
     store[k]=store[k]===val?undefined:val;
     // in-place: repaint only this seg group — no innerHTML swap, no .step rise-animation replay
     b.parentElement.querySelectorAll('button').forEach(x=>{const on=store[k]===+x.dataset.v;x.className=on?`on ${BAND(+x.dataset.v)}`:'';x.setAttribute('aria-pressed',on);});
     renderFooter();
+    saveDraft(); // score buttons are clicks, not input/change -- the delegated pair above never sees them
   }));
   host.querySelectorAll('[data-a]').forEach(t=>t.addEventListener('input',()=>ED.actual[t.dataset.a]=t.value));
   host.querySelectorAll('[data-sn]').forEach(t=>t.addEventListener('input',()=>ED.selfNote[t.dataset.sn]=t.value));
@@ -655,7 +722,7 @@ function stepIncomplete(){
 
 /* ===== nav (single delegated handler; footer rebuilt per step by renderFooter) ===== */
 $('navInner').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;switch(b.id){
-  case 'btnBack': if(stepIdx>0){stepIdx--;render();scrollTo(0,0);} break;
+  case 'btnBack': if(stepIdx>0){stepIdx--;render();saveDraft();scrollTo(0,0);} break;
   case 'btnNext': handleNext(); break;
   case 'rLock': lockEditor(); break;
   case 'rFile': fileFinal(); break;
@@ -669,7 +736,7 @@ function handleNext(){
     }
   }
   const msg=stepIncomplete();if(msg)return showStepErr(msg);
-  if(stepIdx<TOTAL()-1){stepIdx++;render();scrollTo(0,0);}
+  if(stepIdx<TOTAL()-1){stepIdx++;render();saveDraft();scrollTo(0,0);}
 }
 function showStepErr(msg){const se=$('stepErr');se.textContent=msg;se.hidden=false;scrollTo(0,0);}
 
@@ -706,6 +773,7 @@ async function lockEditor(){
   try{
     const r=await fetch(`${WORKER_URL}/kpi/editor`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+    clearDraft(); // locked server-side now; a leftover draft could only ever re-offer stale answers
     showDone('editor',payload.id);
   }catch(e){b.disabled=false;b.textContent='Lock my scores →';alert('Failed to lock: '+e.message);}
 }
@@ -717,6 +785,13 @@ function buildFinalCategories(){
     const selfAvg=metrics.map(m=>m.self).filter(x=>x!=null);const spvAvg=metrics.map(m=>m.spv).filter(x=>x!=null);
     return{name:c.name,metrics,self:selfAvg.length?+(selfAvg.reduce((a,b)=>a+b)/selfAvg.length).toFixed(2):null,spv:spvAvg.length?+(spvAvg.reduce((a,b)=>a+b)/spvAvg.length).toFixed(2):null};
   });
+}
+// The supervisor's written assessment (SPV_ROWS -- all three required by validate()).
+// Sent as ordered {label,text} pairs rather than the raw s0/s1/s2 keys so the card
+// renders the labels that were in force when the case was filed: renaming a row
+// later never relabels an assessment already on record.
+function buildFinalSummary(){
+  return SPV_ROWS.map((label,i)=>({label,text:(SP.sum['s'+i]||'').trim()})).filter(r=>r.text);
 }
 function buildFinalFocus(){
   const fromEditor=ED.focus.map((f,i)=>{const s=SP.foc[i]||{};return{area:f.area,why:f.why,action:s.action||'',measure:s.measure||'',priority:s.priority||'',source:'editor'};});
@@ -731,16 +806,17 @@ function buildPreviewPayload(){
     level:LEVEL_LABEL[ED.level]||ED.level||'',
     quarter:ED.quarter||$('quarter').value||'',
     supervisor:'Supervisor',official_kpi:overall('spv'),self_overall:overall('self'),
-    categories:buildFinalCategories(),focus:buildFinalFocus()};
+    categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
 }
 async function fileFinal(){
   if(!confirm(`File the KPI result for ${ED.editor}?\n\nThis creates the ClickUp report PDF and closes the case.`))return;
   const b=$('rFile');b.disabled=true;b.textContent='Filing…';
   const payload={id:caseId,supervisor:'Supervisor',official_kpi:overall('spv'),
-    categories:buildFinalCategories(),focus:buildFinalFocus()};
+    categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
   try{
     const r=await fetch(`${WORKER_URL}/kpi/finalize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+    clearDraft(); // filed; the case is closed and the draft can only be noise from here
     showDone('filed',caseId,j);
   }catch(e){b.disabled=false;b.textContent='File to ClickUp';alert('Failed to file: '+e.message);}
 }
