@@ -48,8 +48,9 @@ of that back in play. Rewriting the six helpers underneath them puts none of it 
 
 ### Deploy state
 
-`wrangler login` is done, as **admin@planariastudio.com**, account
-`67996ea2ab13af69f085518d636746f6`.
+`wrangler login` is done, as the Planaria admin account. Run `npx wrangler whoami`
+to see which login and account id are active. (Not written down here: this repo is
+public, and whoever picks this up has dashboard access anyway.)
 
 The live worker `planaria-people-worker` was last deployed **11 August 2026** by dashboard
 paste. Everything committed since then is ahead of production. A deploy now carries a month
