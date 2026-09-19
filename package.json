@@ -12,7 +12,8 @@
     "deploy": "wrangler deploy",
     "preflight": "node scripts/goodday_preflight.mjs",
     "provision": "node scripts/provision_goodday_people.mjs",
-    "structure": "node scripts/goodday_structure.mjs"
+    "structure": "node scripts/goodday_structure.mjs",
+    "smoke": "node scripts/goodday_bridge_smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "^3.80.0"

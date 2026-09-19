@@ -35,3 +35,17 @@ browser = { binding = "MYBROWSER" }
 #   CLICKUP_SPACE_ID, CONFIG_SYNC_TOKEN, SHEET_WEBHOOK_URL, PEER_ADMIN_KEY,
 #   PEER_VIEW_KEY (optional)
 # They survive `wrangler deploy` untouched.
+#
+# GoodDay, for the migration. All three are secrets, set the same way:
+#   GOODDAY_TOKEN         org API token, from Settings -> API
+#   GOODDAY_BOT_USER_ID   who actions are attributed to; GoodDay requires it
+#   GOODDAY_TEAM_ID       the "Team" project under People (JORtmi)
+#   GOODDAY_ENABLED       "1" sends every task operation to GoodDay instead of
+#                         ClickUp. Leave it unset until the first three are set
+#                         AND the roster has GoodDay accounts, or tasks will be
+#                         created unassigned. Deploying this file does not flip
+#                         it; it is a secret and deploys do not touch secrets.
+#
+# The ClickUp secrets stay set. The switch is one-way in intent but not in
+# mechanism: unsetting GOODDAY_ENABLED puts everything back on ClickUp without a
+# redeploy, which is the whole reason it is a flag and not a rewrite.

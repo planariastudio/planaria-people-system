@@ -247,7 +247,19 @@ async function goodDaySetStatus(env, taskId, projectId, desiredSubstring, messag
     const statuses = await goodDayListStatuses(env);
     const want = norm(desiredSubstring);
     if (!want) return false;
-    const hit = statuses.find((s) => norm(s.name).includes(want));
+    // Exact first, then the SHORTEST name containing the substring.
+    //
+    // Not just "the first one that matches", because the list this searches is
+    // org-wide: 53 statuses at last count, from every workflow in the company,
+    // in an order the API decides. GoodDay applies whichever id it is given
+    // without checking the task's project uses it -- setting HIRED on a KPI task
+    // returns 200 and sticks -- so a loose match has nothing downstream to catch
+    // it. Shortest-wins keeps "complete" on "Completed" even if somebody adds
+    // "Completed screening" to the hiring workflow next month.
+    const exact = statuses.find((s) => norm(s.name) === want);
+    const hit = exact || statuses
+      .filter((s) => norm(s.name).includes(want))
+      .sort((a, b) => String(a.name).length - String(b.name).length)[0];
     if (!hit) return false;
     const body = { userId: env.GOODDAY_BOT_USER_ID, statusId: hit.id };
     if (message) body.message = gdText(message);
@@ -389,6 +401,22 @@ async function goodDayListCustomFields(env) {
   } catch (e) { return []; }
 }
 
+// Task types are GoodDay's answer to what ClickUp did with tags: "KPI Scorecard",
+// "Peer Appraisal" and "PIP" are types, not labels, so they filter, group and
+// report natively instead of being free text somebody can misspell.
+//
+// There is no API to CREATE one (POST /task-types returns 405), so these are made
+// by hand once and only read here. Returns [] on any failure, because a task
+// created without a type is still a correct task.
+async function goodDayListTaskTypes(env) {
+  try {
+    const res = await gdCall(env, "GET", "/task-types");
+    if (!res.ok) return [];
+    const j = await res.json();
+    return Array.isArray(j) ? j : [];
+  } catch (e) { return []; }
+}
+
 // ---------------------------------------------------------------------------
 // Selftest support
 // ---------------------------------------------------------------------------
@@ -424,5 +452,6 @@ export {
   goodDayGetOrCreateProject,
   goodDaySetCustomFields,
   goodDayListCustomFields,
+  goodDayListTaskTypes,
   goodDayEnvReport
 };

@@ -23,6 +23,26 @@ GOODDAY_BOT_USER_ID=
 # on 19 Sep 2026). Check it is still right before provisioning.
 GOODDAY_PEOPLE_ID=6kRwYR
 
+# THE SWITCH. Unset or "0", every task operation goes to ClickUp exactly as it
+# always has. Set to "1", they all go to GoodDay instead: same call sites, same
+# behaviour, different destination. Nothing else changes when you flip it.
+#
+# Flip it in PRODUCTION with `wrangler secret put GOODDAY_ENABLED`, not here.
+# Setting it here only affects `wrangler dev` and the scripts.
+#
+# Before flipping it, both of these have to be true, or tasks land unassigned:
+#   - the roster's people have GoodDay accounts (goodDayResolveUserId matches on
+#     name, and returns null for anyone not invited yet)
+#   - their projects exist under People > Team (provision_goodday_people.mjs)
+GOODDAY_ENABLED=0
+
+# The "Team" project under People, which holds one project per person.
+# Currently `JORtmi`. Optional: leave it blank and it is looked up by name, which
+# costs one extra API call per cold worker. Worth setting, because there is a
+# SECOND project called "Team" in the PMO demo workspace, and a lookup that ever
+# stopped scoping by parent would find the wrong one.
+GOODDAY_TEAM_ID=JORtmi
+
 # Optional. The project template new projects are created from. Leave blank to
 # let GoodDay pick its default.
 GOODDAY_PROJECT_TEMPLATE_ID=

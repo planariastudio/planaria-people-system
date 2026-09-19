@@ -1,3 +1,25 @@
+import {
+  gdText,
+  goodDayResolveUserId,
+  goodDayCreateTask,
+  goodDayUpdateTask,
+  goodDayDeleteTask,
+  goodDayComment,
+  goodDayListStatuses,
+  goodDaySetStatus,
+  goodDayAttachPdf,
+  goodDayGetOrCreateProject,
+  goodDayListTaskTypes
+} from "./goodday.js";
+import {
+  gdRef,
+  gdParseRef,
+  gdNeedRef,
+  gdCreateOpts,
+  gdUpdateFields,
+  gdUpdateBody,
+  gdTaskUrl
+} from "./goodday_bridge.js";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -19982,6 +20004,86 @@ async function sbDelete(env, table, query) {
   return res.json();
 }
 __name(sbDelete, "sbDelete");
+// ===========================================================================
+// GoodDay dispatch
+// ===========================================================================
+//
+// One switch, GOODDAY_ENABLED=1, sends every task operation to GoodDay instead
+// of ClickUp. It is wired in HERE, inside the `clickup*` helpers, rather than at
+// the ~49 call sites above them, and that is the whole point of the design: the
+// call sites carry behaviour that was expensive to get right -- which list a KPI
+// prompt lands in and why, the task-name suffix that stays readable when a status
+// lookup misses, the best-effort persists that must never break a save. Rewriting
+// them would put every one of those decisions back in play. Rewriting the helpers
+// underneath them puts none of it in play.
+//
+// The flag defaults OFF. Unset, nothing below this line runs and the worker
+// behaves exactly as it did.
+//
+// Two shapes differ between the systems and are translated here rather than in
+// goodday.js, which keeps its own native contract:
+//
+//   1. ClickUp addressed a CONTAINER by list id. GoodDay has one project per
+//      person and tells KPI/Peer/PIP apart by task TYPE. So resolveEditorList
+//      returns a "gd:<projectId>:<type>" reference instead of a bare id, and the
+//      helpers unpack it. Anything handed a real ClickUp list id while the flag
+//      is on throws by name, instead of quietly filing to nowhere.
+//
+//   2. ClickUp field names are not GoodDay field names. Passing `{name: ...}`
+//      straight through to GoodDay is accepted with a 200 and changes nothing,
+//      which is the worst possible failure, so every field is mapped explicitly
+//      and anything unmapped is dropped on purpose.
+
+function GD_ON(env) {
+  return String((env && env.GOODDAY_ENABLED) || "") === "1";
+}
+__name(GD_ON, "GD_ON");
+
+// Per-isolate caches. Both are read-mostly and cheap to rebuild, so a cold
+// isolate costs one extra GET and nothing is persisted that could go stale.
+let GD_TASKTYPES = null;
+var GD_PROJECT_CACHE = /* @__PURE__ */ new Map();
+
+var GD_TASKTYPE_BY_TYPE = { kpi: "KPI Scorecard", peer: "Peer Appraisal", pip: "PIP" };
+
+async function gdTaskTypeId(env, type) {
+  const want = GD_TASKTYPE_BY_TYPE[String(type || "").toLowerCase()];
+  if (!want) return null;
+  try {
+    if (!GD_TASKTYPES) GD_TASKTYPES = await goodDayListTaskTypes(env);
+    const norm2 = (x) => String(x || "").trim().toLowerCase();
+    const hit = (GD_TASKTYPES || []).find((t) => norm2(t.name) === norm2(want));
+    return hit ? hit.id : null;
+  } catch (e) { return null; }
+}
+__name(gdTaskTypeId, "gdTaskTypeId");
+
+// The GoodDay equivalent of resolveEditorList. One project per person under
+// People > Team, with KPI/Peer/PIP separated by task type inside it rather than
+// by sibling lists.
+//
+// "todo" returns null on purpose. My Work is native in GoodDay: a task assigned
+// to someone is already in their list, so the To-do list that existed only to
+// make ClickUp behave that way has nothing to correspond to. Every call site
+// reads `todoListId || <other>`, so null routes them to the person's project,
+// which is exactly right.
+async function gdResolveEditorProject(env, editorId, editorName, type) {
+  if (type === "todo") return null;
+  const key = editorId || editorName;
+  const cached = GD_PROJECT_CACHE.get(key);
+  if (cached) return gdRef(cached, type);
+
+  const teamId = env.GOODDAY_TEAM_ID
+    || (await goodDayGetOrCreateProject(env, "Team", env.GOODDAY_PEOPLE_ID)).id;
+  // get-or-create, matching what clickupGetOrCreateFolder did. The projects are
+  // provisioned from the roster ahead of time by provision_goodday_people.mjs, so
+  // in practice this always finds one; it creates only if somebody joined since.
+  const proj = await goodDayGetOrCreateProject(env, editorName, teamId);
+  GD_PROJECT_CACHE.set(key, proj.id);
+  return gdRef(proj.id, type);
+}
+__name(gdResolveEditorProject, "gdResolveEditorProject");
+
 async function clickupCreateTask(env, name) {
   const res = await fetch(`https://api.clickup.com/api/v2/list/${env.CLICKUP_LIST_ID}/task`, {
     method: "POST",
@@ -19993,6 +20095,7 @@ async function clickupCreateTask(env, name) {
 }
 __name(clickupCreateTask, "clickupCreateTask");
 async function clickupAttachPdf(env, taskId, filename, pdfBytes) {
+  if (GD_ON(env)) return goodDayAttachPdf(env, taskId, filename, pdfBytes, filename);
   const form = new FormData();
   form.append("attachment", new Blob([pdfBytes], { type: "application/pdf" }), filename);
   const res = await fetch(
@@ -20007,6 +20110,7 @@ __name(clickupAttachPdf, "clickupAttachPdf");
 // that triggered it -- but it also shouldn't throw an unhandled rejection out of
 // a handler, which an un-awaited/unchecked fetch rejection could do.
 async function clickupComment(env, taskId, text) {
+  if (GD_ON(env)) return goodDayComment(env, taskId, text);
   try {
     const res = await fetch(`https://api.clickup.com/api/v2/task/${taskId}/comment`, {
       method: "POST",
@@ -20080,6 +20184,12 @@ __name(clickupCreateList, "clickupCreateList");
 // so a 4xx "ClickApp disabled" resolved fine and vanished silently -- there was
 // no way to tell mirroring was off). Callers surface this instead of guessing.
 async function clickupAddTaskToList(env, listId, taskId) {
+  // Nothing to do under GoodDay, and that is the improvement rather than a gap.
+  // These two calls exist because ClickUp needed a task mirrored into a second
+  // "To-do" list to show up in the assignee's own view. GoodDay puts an assigned
+  // task in My Work by itself, so the mirror has no counterpart. Reported as
+  // success because the outcome the caller wanted is already true.
+  if (GD_ON(env)) return true;
   try {
     const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
       method: "POST", headers: { Authorization: env.CLICKUP_TOKEN }
@@ -20089,6 +20199,7 @@ async function clickupAddTaskToList(env, listId, taskId) {
 }
 __name(clickupAddTaskToList, "clickupAddTaskToList");
 async function clickupRemoveTaskFromList(env, listId, taskId) {
+  if (GD_ON(env)) return true;
   try {
     const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task/${taskId}`, {
       method: "DELETE", headers: { Authorization: env.CLICKUP_TOKEN }
@@ -20098,6 +20209,7 @@ async function clickupRemoveTaskFromList(env, listId, taskId) {
 }
 __name(clickupRemoveTaskFromList, "clickupRemoveTaskFromList");
 async function clickupDeleteTask(env, taskId) {
+  if (GD_ON(env)) return goodDayDeleteTask(env, taskId);
   try {
     const res = await fetch(`https://api.clickup.com/api/v2/task/${taskId}`, {
       method: "DELETE", headers: { Authorization: env.CLICKUP_TOKEN }
@@ -20107,6 +20219,16 @@ async function clickupDeleteTask(env, taskId) {
 }
 __name(clickupDeleteTask, "clickupDeleteTask");
 async function clickupCreateTaskInList(env, listId, name, opts = {}) {
+  if (GD_ON(env)) {
+    const ref = gdNeedRef(listId, "clickupCreateTaskInList");
+    const task = await goodDayCreateTask(
+      env, ref.projectId, name, gdCreateOpts(opts, await gdTaskTypeId(env, ref.type))
+    );
+    // Callers read task.id and task.url. GoodDay returns the first and not the
+    // second, so the url is synthesised rather than left null.
+    if (task && task.id && !task.url) task.url = gdTaskUrl(task.id);
+    return task;
+  }
   const payload = { name };
   if (opts.markdown_description) payload.markdown_description = opts.markdown_description;
   if (opts.due_date) { payload.due_date = opts.due_date; payload.due_date_time = false; }
@@ -20127,6 +20249,23 @@ async function clickupCreateTaskInList(env, listId, name, opts = {}) {
 }
 __name(clickupCreateTaskInList, "clickupCreateTaskInList");
 async function clickupUpdateTask(env, taskId, fields) {
+  if (GD_ON(env)) {
+    // Two destinations, because a GoodDay task's description is its first message
+    // and no endpoint can edit it. gdUpdateBody explains why at length. Fields go
+    // to the update endpoint; a new body is appended as a comment.
+    const mapped = gdUpdateFields(fields);
+    const body = gdUpdateBody(fields);
+    let applied = null;
+    if (Object.keys(mapped).length) applied = await goodDayUpdateTask(env, taskId, mapped);
+    if (body) {
+      const posted = await goodDayComment(env, taskId, body);
+      // Report success if EITHER half landed. Callers treat null as "did not
+      // apply" and at least one of them retries the whole update, so returning
+      // null after a comment has already been posted would post it twice.
+      if (posted && !applied) applied = { ok: true, commented: true };
+    }
+    return applied;
+  }
   try {
     const res = await fetch(`https://api.clickup.com/api/v2/task/${taskId}`, {
       method: "PUT",
@@ -20138,6 +20277,10 @@ async function clickupUpdateTask(env, taskId, fields) {
 }
 __name(clickupUpdateTask, "clickupUpdateTask");
 async function clickupListStatuses(env, listId) {
+  if (GD_ON(env)) {
+    const ref = gdParseRef(listId);
+    return ref ? goodDayListStatuses(env, ref.projectId) : [];
+  }
   try {
     const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}`, { headers: { Authorization: env.CLICKUP_TOKEN } });
     if (!res.ok) return [];
@@ -20154,6 +20297,15 @@ __name(clickupListStatuses, "clickupListStatuses");
 // (workspace uses a custom flow, or the call fails), this silently no-ops and the
 // name suffix remains the reliable fallback that already communicates state.
 async function clickupSetStatus(env, taskId, listId, desiredSubstring) {
+  if (GD_ON(env)) {
+    // Same best-effort contract as the ClickUp path below: a project whose
+    // workflow has no matching status is a no-op, and the task-name suffix that
+    // every call site also sets remains the readable record of state.
+    const ref = gdParseRef(listId);
+    if (!ref) return false;
+    try { return await goodDaySetStatus(env, taskId, ref.projectId, desiredSubstring); }
+    catch (e) { return false; }
+  }
   try {
     const statuses = await clickupListStatuses(env, listId);
     const norm = (s) => String(s || "").trim().toLowerCase();
@@ -20200,6 +20352,12 @@ var FOCUS_PRIO = { High: 2, Medium: 3, Low: 4 };
 var PAGES_BASE = "https://planariastudio.github.io/planaria-people-system";
 var CLICKUP_MEMBER_CACHE = null;
 async function clickupResolveUserId(env, editorName) {
+  // GoodDay user ids are opaque strings, ClickUp's were numbers. Callers only
+  // ever pass the result back into an assignee field, so swapping the resolver
+  // swaps the whole chain. Still returns null when nobody matches, which is the
+  // live case for anyone not yet invited to GoodDay: the task is created
+  // unassigned rather than not created at all.
+  if (GD_ON(env)) return goodDayResolveUserId(env, editorName);
   try {
     if (!CLICKUP_MEMBER_CACHE) {
       const res = await fetch("https://api.clickup.com/api/v2/team", { headers: { Authorization: env.CLICKUP_TOKEN } });
@@ -20221,6 +20379,7 @@ __name(clickupResolveUserId, "clickupResolveUserId");
 // `type` is one of "kpi" | "peer" | "pip". Falls back to the flat list if the
 // Space isn't configured, so nothing breaks if CLICKUP_SPACE_ID is missing.
 async function resolveEditorList(env, editorId, editorName, type) {
+  if (GD_ON(env)) return gdResolveEditorProject(env, editorId, editorName, type);
   if (!env.CLICKUP_SPACE_ID) return env.CLICKUP_LIST_ID;
   const key = editorId || editorName;
   let rows = await sbSelect(env, "clickup_map", `?editor_id=eq.${encodeURIComponent(key)}&select=*`);
