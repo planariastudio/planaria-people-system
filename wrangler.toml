@@ -38,11 +38,34 @@ workers_dev = true
 # wrangler would drop the binding and every PDF render would throw.
 browser = { binding = "MYBROWSER" }
 
-# Secrets (NOT stored here — set once via the dashboard or `wrangler secret put`):
-#   SUPABASE_URL, SUPABASE_SERVICE_KEY, CLICKUP_TOKEN, CLICKUP_LIST_ID,
-#   CLICKUP_SPACE_ID, CONFIG_SYNC_TOKEN, SHEET_WEBHOOK_URL, PEER_ADMIN_KEY,
-#   PEER_VIEW_KEY (optional)
+# Secrets (NOT stored here — set once via the dashboard or `wrangler secret put`).
+# Only these five are actually secrets, verified with `wrangler secret list`:
+#   SUPABASE_SERVICE_KEY, CLICKUP_TOKEN, CONFIG_SYNC_TOKEN, SHEET_WEBHOOK_URL,
+#   PEER_ADMIN_KEY
 # They survive `wrangler deploy` untouched.
+#
+# ── READ THIS, IT TOOK THE SYSTEM DOWN ONCE ──────────────────────────────────
+# SUPABASE_URL and CLICKUP_SPACE_ID were NOT secrets. They were plaintext
+# environment variables set in the dashboard, and an earlier version of this
+# comment wrongly listed them as secrets.
+#
+# `wrangler deploy` replaces the worker's variables with what is in THIS file.
+# This file declares no [vars], so the 2026-09-19 deploy wiped both. SUPABASE_URL
+# became undefined, every Supabase call turned into "Invalid URL: undefined/..."
+# and /config failed, which is the route every form calls on load. The whole
+# system was down until they were re-set as secrets.
+#
+# Anything the worker reads from `env` must be either a secret or declared in
+# [vars] below. A dashboard-only variable does not survive a deploy. If you add
+# a new env value, add it in one of those two places in the same commit.
+#
+# Deliberately NOT in [vars]: this repo is public, and the Supabase project URL
+# is not exposed anywhere else (the forms only ever call the worker). Keeping it
+# a secret keeps it that way.
+#
+# CLICKUP_LIST_ID and PEER_VIEW_KEY are unset and always have been. LIST_ID is
+# only the fallback for a missing CLICKUP_SPACE_ID, so it never fires.
+# ─────────────────────────────────────────────────────────────────────────────
 #
 # GoodDay, for the migration. All three are secrets, set the same way:
 #   GOODDAY_TOKEN         org API token, from Settings -> API

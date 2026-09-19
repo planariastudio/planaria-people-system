@@ -65,6 +65,31 @@ Verified before deploying:
   nobody notices when the default changes.
 - Secrets are not touched by a deploy, so `GOODDAY_ENABLED` stays unset through it.
 
+**That list had a hole in it, and the deploy on 2026-09-19 fell straight through it.**
+
+Secrets survive a deploy. **Plaintext environment variables do not.** `wrangler deploy`
+replaces the worker's variables with whatever `wrangler.toml` declares, and it declared none.
+`SUPABASE_URL` and `CLICKUP_SPACE_ID` were dashboard variables, not secrets, despite a comment
+in `wrangler.toml` saying otherwise. Both were wiped.
+
+`SUPABASE_URL` going undefined turned every Supabase call into
+`Invalid URL: undefined/rest/v1/...`. `/config` is the route every form calls on load, so KPI,
+Peer, PIP and the admin portal were all down until the two values were re-set as secrets.
+
+Recovered from Cloudflare's own version history, which keeps the bindings of every past
+version:
+
+```
+npx wrangler versions view 26224d88-700d-4ecf-8e21-03ab7fd3f37d
+```
+
+That is the last known-good version, 2026-08-11. Use the same trick if it happens again
+rather than hunting through dashboards.
+
+**Before any future deploy, check that every `env.X` the worker reads is either a secret or
+declared in `[vars]`.** `wrangler secret list` is the authority on which is which, not the
+comments. The comment block in `wrangler.toml` is now correct and explains why.
+
 To ship:
 
 ```
