@@ -217,13 +217,19 @@ const $=id=>document.getElementById(id);
 const LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"};
 const LK=["intern","jr","ve","senior","spv","principal"];
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
+/* Roster levels come from a human-edited Google Sheet, so their casing drifts.
+   Joshua's row reads "Supervisor" while every other row is lowercase, and the
+   lookup below is keyed lowercase -- so his level resolved to undefined, the
+   rubric never loaded, and his KPI form showed "Select your level to load
+   targets" forever. Normalise on the way in rather than trusting the sheet. */
+const lvlCode = (v) => LVL_FROM_DB[String(v == null ? "" : v).trim().toLowerCase()] || v;
 let ROSTER=[], KPI=[], SUPERVISORS=[], CONFIG_VERSION=null, MY_IDENTITY=null;
 function bulletsToLine(x){return Array.isArray(x)?x.join(' '):(x||'');}
 async function fetchWithRetry(url,opt,tries=4,delayMs=700){let e;for(let i=0;i<tries;i++){try{const r=await fetch(url,opt);if(!r.ok&&r.status>=500)throw new Error('HTTP '+r.status);return r;}catch(x){e=x;if(i<tries-1)await new Promise(r=>setTimeout(r,delayMs*(i+1)));}}throw e;}
 async function loadConfig(){
   const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
-  ROSTER=cfg.roster.map(r=>[r.name,(LVL_FROM_DB[r.level]||r.level),r.id]);
+  ROSTER=cfg.roster.map(r=>[r.name,lvlCode(r.level),r.id]);
   const order=[],map={};
   cfg.kpi_rubric.forEach(row=>{
     if(!map[row.category]){map[row.category]={cat:row.category,metrics:[]};order.push(row.category);}
@@ -271,7 +277,7 @@ function runBoot(){
       try{
         const r=await fetch(`${WORKER_URL}/whoami?t=${encodeURIComponent(editorToken)}`);
         const j=await r.json();
-        if(j.found){ MY_IDENTITY={id:j.id,name:j.name,level:LVL_FROM_DB[j.level]||j.level}; enterEditor(); return; }
+        if(j.found){ MY_IDENTITY={id:j.id,name:j.name,level:lvlCode(j.level)}; enterEditor(); return; }
       }catch(e){}
       renderPersonalLinkRequired(); return;
     }

@@ -151,6 +151,12 @@ const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
 let ROSTER=[], LL={intern:"Intern",jr:"Jr",ve:"Video Editor",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], BARS={}, COMPS=[];
 let PASS_BAR=3.0, MGRS=["Joshua","Rashy"], SEVMAP={Minor:30,Moderate:60,Severe:90};
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
+/* Roster levels come from a human-edited Google Sheet, so their casing drifts.
+   Joshua's row reads "Supervisor" while every other row is lowercase, and the
+   lookup below is keyed lowercase -- so his level resolved to undefined, the
+   rubric never loaded, and his KPI form showed "Select your level to load
+   targets" forever. Normalise on the way in rather than trusting the sheet. */
+const lvlCode = (v) => LVL_FROM_DB[String(v == null ? "" : v).trim().toLowerCase()] || v;
 function bulletsToLine(x){return Array.isArray(x)?x.join(' \u00b7 '):(x||'');}
 async function fetchWithRetry(url,tries=4,delayMs=700){
   let lastErr;
@@ -166,7 +172,7 @@ async function fetchWithRetry(url,tries=4,delayMs=700){
 async function loadConfig(){
   const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
-  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level]);
+  ROSTER=cfg.roster.map(r=>[r.name, lvlCode(r.level)]);
   BARS={};
   cfg.pip_rubric.forEach(row=>{
     const lv=row.levels;

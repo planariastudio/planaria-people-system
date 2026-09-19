@@ -144,6 +144,12 @@ const SCALE=[[1,'Unsat.'],[2,'Needs'],[3,'Fair'],[4,'Good'],[5,'Excellent']];
 const SCALEFULL={1:'Unsatisfactory',2:'Needs Work',3:'Fair',4:'Good',5:'Excellent'};
 let LVLNAME={intern:'Intern',jr:'Junior',ve:'Video Editor',senior:'Senior',supervisor:'Supervisor',principal:'Principal'};
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"supervisor",principal:"principal"};
+/* Roster levels come from a human-edited Google Sheet, so their casing drifts.
+   Joshua's row reads "Supervisor" while every other row is lowercase, and the
+   lookup below is keyed lowercase -- so his level resolved to undefined, the
+   rubric never loaded, and his KPI form showed "Select your level to load
+   targets" forever. Normalise on the way in rather than trusting the sheet. */
+const lvlCode = (v) => LVL_FROM_DB[String(v == null ? "" : v).trim().toLowerCase()] || v;
 function bulletsToAnchor(x){return Array.isArray(x)?x.map(b=>'\u2022  '+b).join('\n'):(x||'');}
 async function fetchWithRetry(url,tries=4,delayMs=700){
   let lastErr;
@@ -159,7 +165,7 @@ async function fetchWithRetry(url,tries=4,delayMs=700){
 async function loadConfig(){
   const res=await fetchWithRetry(`${WORKER_URL}/config`);
   const cfg=await res.json();
-  ROSTER=cfg.roster.map(r=>[r.name, LVL_FROM_DB[r.level]||r.level, r.id]);
+  ROSTER=cfg.roster.map(r=>[r.name, lvlCode(r.level), r.id]);
   const clusterOrder=[], clusterMap={};
   cfg.peer_rubric.forEach(row=>{
     if(!clusterMap[row.cluster]){clusterMap[row.cluster]={name:row.cluster,values:[]};clusterOrder.push(row.cluster);}
