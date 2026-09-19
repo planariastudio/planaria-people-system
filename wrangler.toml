@@ -25,6 +25,14 @@ compatibility_date = "2026-07-09"
 # The worker imports `node:buffer`; nodejs_compat is required for it to run.
 compatibility_flags = ["nodejs_compat"]
 
+# The forms call https://planaria-people-worker.planariastudio.workers.dev, which
+# is a workers.dev subdomain and not a route. Wrangler defaults this to true when
+# no routes are declared, so leaving it out would work -- but the whole point of
+# the warning at the top of this file is that a deploy REPLACES settings, and a
+# setting that survives by default is one nobody notices until a version of
+# wrangler changes the default. Declared, so the forms cannot lose their endpoint.
+workers_dev = true
+
 # Cloudflare browser rendering, used by renderPdf() for all PDF attachments.
 # `env.MYBROWSER` in the code binds to this. Must stay declared or deploying via
 # wrangler would drop the binding and every PDF render would throw.
