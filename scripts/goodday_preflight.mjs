@@ -226,11 +226,17 @@ function summarise(leftovers) {
     for (const l of leftovers) console.log("    " + l);
   }
 
-  // The one thing a script cannot check for itself.
-  console.log("\n  Still needs a human:");
-  console.log("    Does an assigned task appear in that person's My Work when they are");
-  console.log("    NOT a member of the project? That decides whether editors need");
-  console.log("    membership of People. Ask someone to look, do not assume.\n");
+  // Two things a script cannot check for itself. Both are blocking.
+  console.log("\n  Still needs a human, and both of these are blocking:\n");
+  console.log("    1. Does a status change made THROUGH THE API fire an automation,");
+  console.log("       or do automations only watch changes made in the UI?");
+  console.log("       actionRequiredUserId is readable but NOT writable via the API, so");
+  console.log("       Action Required can only be set by a rule. Every automation in");
+  console.log("       GOODDAY_AUTOMATIONS.md assumes this works. If it does not, that");
+  console.log("       whole design collapses. Build one trivial rule and watch it.\n");
+  console.log("    2. Does an assigned task appear in that person's My Work when they are");
+  console.log("       NOT a member of the project? That decides whether editors need");
+  console.log("       membership of People. Ask someone to look, do not assume.\n");
 
   process.exit(bad ? 1 : 0);
 }

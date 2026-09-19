@@ -11,7 +11,8 @@
     "predeploy": "npm run verify",
     "deploy": "wrangler deploy",
     "preflight": "node scripts/goodday_preflight.mjs",
-    "provision": "node scripts/provision_goodday_people.mjs"
+    "provision": "node scripts/provision_goodday_people.mjs",
+    "structure": "node scripts/goodday_structure.mjs"
   },
   "devDependencies": {
     "wrangler": "^3.80.0"
