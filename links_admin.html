@@ -158,17 +158,56 @@
 
 <script>
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
-// This page isn't linked from anywhere public — the URL itself is the access control,
-// so it goes straight to the table. The Worker still checks PEER_ADMIN_KEY server-side
-// (this constant must match that secret); this is not meant to stop someone who has
-// this page's URL, only to keep the API off-limits to anyone hitting it directly.
-const KEY='Planaria-admin';
+// The admin key is NOT in this file. It used to be, as `const KEY='Planaria-admin'`,
+// on the reasoning that "the URL itself is the access control" because the page is
+// unlisted. That stopped being true: this repo is public, so the page and the key were
+// both readable from GitHub, and the same string was ALSO the supervisor password in
+// kpi_scorecard.html, which every editor opens legitimately.
+//
+// It matters because /peer/rater-links hands back every person's peer_token, and those
+// tokens are identity: one lets someone open that person's KPI form or rate as them.
+//
+// Now it is typed once per browser session and kept in sessionStorage, so nothing
+// secret ships in a public file. The Worker still checks PEER_ADMIN_KEY server-side,
+// which is the only check that was ever real.
+const KEY_STORE='ppsAdminKey';
+const adminKey=()=>{try{return sessionStorage.getItem(KEY_STORE)||'';}catch(e){return '';}};
+const setAdminKey=k=>{try{sessionStorage.setItem(KEY_STORE,k);}catch(e){}};
+const clearAdminKey=()=>{try{sessionStorage.removeItem(KEY_STORE);}catch(e){}};
 let ROSTER=[];
+
+// Rendered instead of the table when there is no key, and again if the Worker rejects
+// one. A plain form rather than window.prompt, because this page is embedded in an
+// iframe inside GoodDay and a sandboxed iframe can have prompt() blocked outright.
+function showKeyGate(msg){
+  const app=document.getElementById('appWrap');
+  if(app) app.hidden=true;
+  let g=document.getElementById('keyGate');
+  if(!g){g=document.createElement('div');g.id='keyGate';g.className='wrap';document.body.appendChild(g);}
+  g.hidden=false;
+  g.innerHTML='<div style="max-width:420px;margin:60px auto;text-align:center">'
+    +'<h1 style="margin:0 0 6px">Admin access</h1>'
+    +'<p class="muted" style="margin:0 0 16px">Enter the admin key. It is kept for this browser session only.</p>'
+    +(msg?'<div class="err" style="margin:0 0 12px">'+msg+'</div>':'')
+    +'<input type="password" id="akIn" autocomplete="current-password" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit">'
+    +'<button class="btn primary" id="akGo" type="button" style="margin-top:14px">Continue</button></div>';
+  const go=()=>{
+    const v=document.getElementById('akIn').value.trim();
+    if(!v){showKeyGate('Enter a key.');return;}
+    setAdminKey(v);g.hidden=true;g.innerHTML='';boot();
+  };
+  document.getElementById('akGo').onclick=go;
+  const inp=document.getElementById('akIn');
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+  inp.focus();
+}
 
 async function api(path,opt){
   const sep=path.includes('?')?'&':'?';
-  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
-  if(r.status===401) throw new Error('The Worker rejected the admin key — PEER_ADMIN_KEY must be set to match this page.');
+  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(adminKey())}`,opt);
+  // A wrong key is recoverable, so drop it and ask again rather than leaving the page
+  // half-broken with a stored value that will fail every subsequent call.
+  if(r.status===401){clearAdminKey();showKeyGate('That key was rejected. Check PEER_ADMIN_KEY.');throw new Error('Admin key rejected.');}
   const j=await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
   return j;
@@ -355,6 +394,7 @@ async function loadPipTracker(){
 
 let WIRED=false;
 async function boot(){
+  if(!adminKey()){showKeyGate('');return;}
   document.getElementById('appWrap').hidden=false;
   try{
     const cfg=await (await fetch(`${WORKER_URL}/config`)).json();

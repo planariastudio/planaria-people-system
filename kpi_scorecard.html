@@ -303,7 +303,19 @@ function enterEditor(){
   STAGE='editor';stepIdx=0;curLevel=MY_IDENTITY.level;buildCtx('editor');showNav();resetEditorScores();maybeEditorId();
 }
 function enterSupervisor(){STAGE='supervisor';stepIdx=0;buildCtx('supervisor');showNav();render();}
-const SPV_PASSWORD='Planaria-admin';
+/* This gate is a speed bump, not security: it is a client-side string compare and
+   the value is readable in this page's source by anyone who opens their own KPI
+   form. That is a deliberate trade-off for an internal tool and is fine.
+
+   What was NOT fine, until 2026-09-20, is that this string was 'Planaria-admin',
+   the same value as PEER_ADMIN_KEY and the admin key in links_admin.html. Every
+   editor opening their own scorecard could read the key that unlocks the admin
+   API, including /peer/rater-links, which returns every person's peer_token, and
+   those tokens are identity.
+
+   MUST NEVER equal PEER_ADMIN_KEY. Change it here whenever you like, it is only
+   ever compared against what someone types into the box below. */
+const SPV_PASSWORD='Planaria-supervisor';
 function enterSupervisorGated(){
   if(sessionStorage.getItem('kpiSpvOk')==='1'){enterSupervisor();return;}
   hideNav();
