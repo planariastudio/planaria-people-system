@@ -151,7 +151,10 @@ function saveCreated(){ try{ localStorage.setItem('systemCheckCreated', JSON.str
 
 async function api(path,opt){
   const sep=path.includes('?')?'&':'?';
-  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEYV())}`,opt);
+  // The admin key also goes in x-spv-key: KPI filing and PIP updates now refuse
+  // requests without a supervisor credential, and the admin key counts as one.
+  const o=Object.assign({},opt||{});o.headers=Object.assign({},o.headers||{},{'x-spv-key':KEYV()});
+  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEYV())}`,o);
   const j=await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
   return j;

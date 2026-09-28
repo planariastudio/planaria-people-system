@@ -31,7 +31,17 @@ const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
   const id=new URLSearchParams(location.search).get('kpi');
   if(!id){document.getElementById('root').innerHTML='<div class="empty">No case specified — open this page with <code>?kpi=&lt;case id&gt;</code>.</div>';document.getElementById('pdfBtn').style.display='none';return;}
   try{
-    const r=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(id)}`);
+    // Who is asking: the supervisor who just filed (same tab, see kpi_scorecard.html)
+    // or an editor opening their own result with ?e=<personal token>.
+    const hdr={};
+    const tok=new URLSearchParams(location.search).get('e');if(tok)hdr['x-editor-token']=tok;
+    try{const k=sessionStorage.getItem('kpiSpvKey');if(k)hdr['x-spv-key']=k;}catch(e){}
+    const r=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(id)}`,{headers:hdr});
+    if(r.status===401){
+      document.getElementById('root').innerHTML=`<div class="empty">This result is private. Open it from the supervisor form after entering the supervisor password, or from your own personal KPI link.</div>`;
+      document.getElementById('pdfBtn').style.display='none';
+      return;
+    }
     const j=await r.json();
     if(!j.found||!j.case.finalized||!j.case.detail){
       document.getElementById('root').innerHTML=`<div class="empty">Case <b>${esc(id)}</b> hasn't been filed yet — there's no result card until a supervisor files it.</div>`;
