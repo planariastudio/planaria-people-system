@@ -21601,6 +21601,39 @@ async function handleSelfTest(env, key) {
     add("ClickUp · space", "warn", "CLICKUP_SPACE_ID not set — falling back to the flat CLICKUP_LIST_ID, no per-person folders");
   }
 
+  // --- GoodDay: the switch, and whether the destination it selects is complete ---
+  // handleSelfTest audited SUPABASE_*, CLICKUP_TOKEN and PEER_ADMIN_KEY and never
+  // looked at a single GOODDAY_* variable, so the one endpoint that could answer
+  // "is the flag on, and is it complete?" was blind to exactly the half of the
+  // config the migration turns on. `wrangler secret list` shows names, not values,
+  // which is why the flag's state had to be inferred rather than read.
+  // GD_ON is reused rather than restated so this cannot drift from the dispatch.
+  const gdOn = GD_ON(env);
+  const gdRequired = ["GOODDAY_TOKEN", "GOODDAY_BOT_USER_ID"];
+  const gdRouting = ["GOODDAY_PEOPLE_ID", "GOODDAY_TEAM_ID"];
+  const gdMissingReq = gdRequired.filter((k) => !env[k]);
+  const gdMissingRoute = gdRouting.filter((k) => !env[k]);
+  add("GoodDay · switch", gdOn ? "warn" : "info",
+    gdOn ? "GOODDAY_ENABLED=1 — every task operation is going to GoodDay"
+         : `GOODDAY_ENABLED is not "1" — every task operation is going to ClickUp`);
+  if (gdOn) {
+    // Flag on with anything missing is the half-live state: task creation fails on
+    // fromUserId, or lands in the wrong place. Hard fail, not a warn.
+    add("GoodDay · required", gdMissingReq.length ? "fail" : "pass",
+      gdMissingReq.length ? `Flag is ON and missing: ${gdMissingReq.join(", ")} — task creation will fail`
+                          : `${gdRequired.join(", ")} present`);
+    add("GoodDay · routing", gdMissingRoute.length ? "fail" : "pass",
+      gdMissingRoute.length ? `Flag is ON and missing: ${gdMissingRoute.join(", ")} — projects resolve by name lookup or not at all`
+                            : `${gdRouting.join(", ")} present`);
+  } else {
+    const gdAll = [...gdMissingReq, ...gdMissingRoute];
+    add("GoodDay · readiness", gdAll.length ? "warn" : "pass",
+      gdAll.length ? `Not ready to flip. Still missing: ${gdAll.join(", ")}`
+                   : "All GoodDay secrets present — safe to set GOODDAY_ENABLED=1");
+  }
+  add("GoodDay · optional", "info",
+    ["GOODDAY_PROJECT_TEMPLATE_ID"].map((k) => `${k}${env[k] ? " \u2713" : " \u2014"}`).join("  "));
+
   // --- Sheet webhook (config only; we don't POST test rows into your sheet) ---
   add("Sheet · webhook", env.SHEET_WEBHOOK_URL ? "pass" : "warn",
     env.SHEET_WEBHOOK_URL ? "SHEET_WEBHOOK_URL configured (raw-row mirroring on)" : "Not set — form submissions won't mirror into the *_Raw tabs");

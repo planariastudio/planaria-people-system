@@ -149,7 +149,7 @@
 /* ===== CONFIG · loaded live from the Worker's /config endpoint ===== */
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
 let ROSTER=[], LL={intern:"Intern",jr:"Jr",ve:"Video Editor",senior:"Senior",spv:"Supervisor",principal:"Principal"}, LK=["intern","jr","ve","senior","spv","principal"], BARS={}, COMPS=[];
-let PASS_BAR=3.0, MGRS=["Joshua","Rashy"], SEVMAP={Minor:30,Moderate:60,Severe:90};
+let PASS_BAR=3.0, MGRS=["Joshua Ervin","Rashy Azhardwian","Julius Pandu"], SEVMAP={Minor:30,Moderate:60,Severe:90};
 const LVL_FROM_DB={intern:"intern",jr:"jr",assoc:"ve",senior:"senior",supervisor:"spv",principal:"principal"};
 /* Roster levels come from a human-edited Google Sheet, so their casing drifts.
    Joshua's row reads "Supervisor" while every other row is lowercase, and the
@@ -449,8 +449,8 @@ async function loadCase(id){
       if (c.final_review_date) $('finalDate').value = c.final_review_date;
       if (c.summary) $('summary').value = c.summary;
       S.managers = c.managers || [];
-      syncMgr();
       mgrMenu.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = S.managers.includes(cb.value));
+      syncMgr();
       if (Array.isArray(c.gaps) && c.gaps.length) {
         S.gaps = c.gaps.map(g => ({
           comp: g.competency || '', now: g.score_now != null ? String(g.score_now) : '',
