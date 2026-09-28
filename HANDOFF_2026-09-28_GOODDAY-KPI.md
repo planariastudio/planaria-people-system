@@ -58,3 +58,8 @@ Ran the real `goodDayResolveUserId` against every `/config` roster name:
   succeed. Rashy's scoring is backed up as `KPI Scorecard_Davin.md` (Downloads).
 - Peer and PIP flows have not had a live GoodDay pass; only KPI's shared endpoints were
   exercised. They use the same helpers, so risk is low, but run one of each after cutover.
+
+## 2026-09-28 decisions (Joshua)
+- **Rafli Ibrahim → past editor.** In the roster Google Sheet, tab `Config_Roster`, set Rafli's `active` cell to `FALSE` (do not delete the row — filed history keeps his name), then Sheet custom menu → Sync to Worker. After that he drops out of every KPI/Peer/PIP dropdown and no code alias is needed. This is a Sheet edit; it was NOT done from the migration session (no Sheet access there).
+- **GoodDay cutover: rolled back / stay OFF for now.** GOODDAY_ENABLED is not 1 (Davin's KPI filed via the ClickUp path, proving it). Do not set it to 1 yet. The code is ready behind the flag whenever you choose to cut over.
+- **PR #3 merged to main** on 28 Sep. GitHub Pages republishes the new forms. Until the Worker is deployed with the new auth, the supervisor + PIP forms are down. To restore: `wrangler secret put SPV_KEY`, `wrangler secret put PEER_ADMIN_KEY` (both NEW values), then `npm run deploy`.
