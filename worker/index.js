@@ -20,6 +20,7 @@ import {
   gdUpdateBody,
   gdTaskUrl
 } from "./goodday_bridge.js";
+import { readAuth, isSupervisorKey, ownsCase, isSelf, DENIED } from "./auth.js";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -19905,7 +19906,7 @@ var MIN_N = 2;
 var CORS = {
   "Access-Control-Allow-Origin": "https://planariastudio.github.io",
   "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
+  "Access-Control-Allow-Headers": "Content-Type, x-spv-key, x-editor-token"
 };
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -20435,6 +20436,14 @@ async function editorSlug(env, name) {
   } catch (e) { return null; }
 }
 __name(editorSlug, "editorSlug");
+// The roster row behind an editor's personal token, or null. Used only to decide
+// whether a caller may see a case; the decision itself is in auth.js.
+async function personFromToken(env, token) {
+  if (!token) return null;
+  const rows = await sbSelect(env, "roster", `?peer_token=eq.${encodeURIComponent(token)}&select=id,name`);
+  return rows.length ? rows[0] : null;
+}
+__name(personFromToken, "personFromToken");
 // Cloudflare's Browser Rendering binding has a concurrency/rate limit that a
 // burst of PDF-heavy operations (e.g. filing KPI + Peer + PIP back to back, as
 // system_check.html does) can genuinely hit -- "Unable to create new browser:
@@ -21493,7 +21502,7 @@ async function handleSelfTest(env, key) {
   const add = (name, status, detail) => checks.push({ name, status, detail });
 
   // --- secrets present (names only; never echo values) ---
-  const required = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "CLICKUP_TOKEN", "PEER_ADMIN_KEY"];
+  const required = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "CLICKUP_TOKEN", "PEER_ADMIN_KEY", "SPV_KEY"];
   const optional = ["CLICKUP_SPACE_ID", "CLICKUP_LIST_ID", "SHEET_WEBHOOK_URL", "CONFIG_SYNC_TOKEN", "PEER_VIEW_KEY"];
   const missingReq = required.filter((k) => !env[k]);
   add("Secrets · required", missingReq.length ? "fail" : "pass",
@@ -21600,6 +21609,39 @@ async function handleSelfTest(env, key) {
   } else if (teamOk) {
     add("ClickUp · space", "warn", "CLICKUP_SPACE_ID not set — falling back to the flat CLICKUP_LIST_ID, no per-person folders");
   }
+
+  // --- GoodDay: the switch, and whether the destination it selects is complete ---
+  // handleSelfTest audited SUPABASE_*, CLICKUP_TOKEN and PEER_ADMIN_KEY and never
+  // looked at a single GOODDAY_* variable, so the one endpoint that could answer
+  // "is the flag on, and is it complete?" was blind to exactly the half of the
+  // config the migration turns on. `wrangler secret list` shows names, not values,
+  // which is why the flag's state had to be inferred rather than read.
+  // GD_ON is reused rather than restated so this cannot drift from the dispatch.
+  const gdOn = GD_ON(env);
+  const gdRequired = ["GOODDAY_TOKEN", "GOODDAY_BOT_USER_ID"];
+  const gdRouting = ["GOODDAY_PEOPLE_ID", "GOODDAY_TEAM_ID"];
+  const gdMissingReq = gdRequired.filter((k) => !env[k]);
+  const gdMissingRoute = gdRouting.filter((k) => !env[k]);
+  add("GoodDay · switch", gdOn ? "warn" : "info",
+    gdOn ? "GOODDAY_ENABLED=1 — every task operation is going to GoodDay"
+         : `GOODDAY_ENABLED is not "1" — every task operation is going to ClickUp`);
+  if (gdOn) {
+    // Flag on with anything missing is the half-live state: task creation fails on
+    // fromUserId, or lands in the wrong place. Hard fail, not a warn.
+    add("GoodDay · required", gdMissingReq.length ? "fail" : "pass",
+      gdMissingReq.length ? `Flag is ON and missing: ${gdMissingReq.join(", ")} — task creation will fail`
+                          : `${gdRequired.join(", ")} present`);
+    add("GoodDay · routing", gdMissingRoute.length ? "fail" : "pass",
+      gdMissingRoute.length ? `Flag is ON and missing: ${gdMissingRoute.join(", ")} — projects resolve by name lookup or not at all`
+                            : `${gdRouting.join(", ")} present`);
+  } else {
+    const gdAll = [...gdMissingReq, ...gdMissingRoute];
+    add("GoodDay · readiness", gdAll.length ? "warn" : "pass",
+      gdAll.length ? `Not ready to flip. Still missing: ${gdAll.join(", ")}`
+                   : "All GoodDay secrets present — safe to set GOODDAY_ENABLED=1");
+  }
+  add("GoodDay · optional", "info",
+    ["GOODDAY_PROJECT_TEMPLATE_ID"].map((k) => `${k}${env[k] ? " \u2713" : " \u2014"}`).join("  "));
 
   // --- Sheet webhook (config only; we don't POST test rows into your sheet) ---
   add("Sheet · webhook", env.SHEET_WEBHOOK_URL ? "pass" : "warn",
@@ -22063,7 +22105,16 @@ var index_default = {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
     const url = new URL(request.url);
     const path = url.pathname;
+    // Case-level access. See auth.js for why this exists and what each header means.
+    const auth = readAuth(request);
+    const spv = isSupervisorKey(env, auth.spvKey);
+    let meCache;
+    const me = async () => (meCache !== void 0 ? meCache : (meCache = await personFromToken(env, auth.editorToken)));
+    const denied = () => err(DENIED.message, DENIED.status);
     try {
+      if (path === "/spv/check" && request.method === "GET") {
+        return spv ? json({ ok: true }) : err("Wrong password.", 401);
+      }
       if (path === "/config" && request.method === "GET") {
         return await handleConfig(env);
       }
@@ -22077,9 +22128,11 @@ var index_default = {
         return await handleMyPeerAssignments(env, url.searchParams.get("t"), url.searchParams.get("cycle"));
       }
       if (path === "/kpi/next-id" && request.method === "GET") {
+        if (!spv && !isSelf(await me(), url.searchParams.get("editor"))) return denied();
         return await handleKpiNextId(env, url.searchParams.get("quarter"), url.searchParams.get("editor"));
       }
       if (path === "/kpi/open" && request.method === "GET") {
+        if (!spv && !isSelf(await me(), url.searchParams.get("editor"))) return denied();
         return await handleKpiOpen(env, url.searchParams.get("editor"), url.searchParams.get("quarter"));
       }
       if (path === "/peer/aggregate" && request.method === "GET") {
@@ -22096,12 +22149,22 @@ var index_default = {
         return await handleDeleteKpiCase(env, decodeURIComponent(kpiDelMatch[1]), url.searchParams.get("key"));
       }
       if (path.match(/^\/kpi\/[^/]+$/) && request.method === "GET") {
-        return await handleKpiGet(env, decodeURIComponent(path.split("/")[2]));
+        const kpiId = decodeURIComponent(path.split("/")[2]);
+        if (spv) return await handleKpiGet(env, kpiId);
+        const person = await me();
+        if (!person) return denied();
+        const rows = await sbSelect(env, "kpi_case", `?id=eq.${encodeURIComponent(kpiId)}&select=*`);
+        if (!rows.length) return json({ found: false });
+        if (!ownsCase(person, rows[0])) return denied();
+        return json({ found: true, case: rows[0] });
       }
       if (path === "/kpi/editor" && request.method === "POST") {
-        return await handleKpiEditor(env, await request.json());
+        const body = await request.json();
+        if (!spv && !isSelf(await me(), body.editor)) return denied();
+        return await handleKpiEditor(env, body);
       }
       if (path === "/kpi/finalize" && request.method === "POST") {
+        if (!spv) return denied();
         return await handleKpiFinalize(env, await request.json());
       }
       if (path === "/kpi/create-link-task" && request.method === "POST") {
@@ -22150,17 +22213,21 @@ var index_default = {
         return await handleCreatePipLinkTask(env, { ...body, key: body.key || url.searchParams.get("key") });
       }
        if (path === "/pip/open" && request.method === "GET") {
+        if (!spv) return denied();
         return await handlePipOpen(env, url.searchParams.get("editor"));
       }
        if (path === "/pip/next-id" && request.method === "GET") {
+        if (!spv) return denied();
         return await handlePipNextId(env, url.searchParams.get("quarter"), url.searchParams.get("editor"));
       }
       const pipMatch = path.match(/^\/pip\/([^/]+)$/);
       if (pipMatch && request.method === "GET") {
+        if (!spv) return denied();
         return await handlePipGet(env, pipMatch[1]);
       }
       const pipUpdateMatch = path.match(/^\/pip\/([^/]+)\/update$/);
       if (pipUpdateMatch && request.method === "POST") {
+        if (!spv) return denied();
         return await handlePipUpdate(env, pipUpdateMatch[1], await request.json());
       }
       return err("not found", 404);

@@ -343,6 +343,31 @@ test("a unique name prefix resolves, an ambiguous one does not", async () => {
   assert.equal(await goodDayResolveUserId(env, ""), null);
 });
 
+test("a name alias redirects a mismatched roster name to the real account", async () => {
+  // "Eduardus Kent Sutanza" (roster) vs "Kent Sutanza" (GoodDay): not a shared
+  // prefix, so without the alias it resolves to null and files unassigned.
+  const users = [
+    { id: "kent", name: "Kent Sutanza", primaryEmail: "kensutanza@gmail.com" },
+    { id: "other", name: "Kenji Watanabe", primaryEmail: "k@x.com" }
+  ];
+  const { env } = mkEnv([["/users", { json: users }]]);
+  assert.equal(await goodDayResolveUserId(env, "Eduardus Kent Sutanza"), "kent", "built-in alias");
+  // The email path is untouched by the alias map.
+  const { env: env2 } = mkEnv([["/users", { json: users }]]);
+  assert.equal(await goodDayResolveUserId(env2, "kensutanza@gmail.com"), "kent");
+});
+
+test("GOODDAY_NAME_ALIASES overrides and extends the built-in aliases", async () => {
+  const users = [{ id: "r", name: "Rafli I", primaryEmail: "r@x.com" }];
+  const { env } = mkEnv([["/users", { json: users }]]);
+  env.GOODDAY_NAME_ALIASES = JSON.stringify({ "Rafli Ibrahim": "Rafli I" });
+  assert.equal(await goodDayResolveUserId(env, "Rafli Ibrahim"), "r", "env alias resolves");
+  // A malformed override must not throw; it falls back to the built-in default.
+  const { env: env3 } = mkEnv([["/users", { json: [{ id: "kent", name: "Kent Sutanza" }] }]]);
+  env3.GOODDAY_NAME_ALIASES = "{not json";
+  assert.equal(await goodDayResolveUserId(env3, "Eduardus Kent Sutanza"), "kent", "default still works");
+});
+
 // --- env report ------------------------------------------------------------
 
 test("env report names keys and never echoes values", () => {

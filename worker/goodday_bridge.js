@@ -105,6 +105,14 @@ function gdUpdateFields(fields) {
   // endpoint with a status id, not through update, so status is routed via
   // clickupSetStatus -> goodDaySetStatus before it can ever reach here.
   //
+  // Reassignment is absent too, and if it is ever added the key is
+  // `assignedToUserId`, NOT `toUserId`. `toUserId` is the create-time name for
+  // the same thing; sending it to PUT /task/:id/update returns 200 "OK" and
+  // changes nothing. Verified against the live API 2026-09-21. The whitelist
+  // above is what keeps that trap away from callers: an unmapped key is dropped
+  // here rather than forwarded into a silent no-op at GoodDay. No call site
+  // reassigns anything today -- clickupUpdateTask is only ever passed `status`.
+  //
   // The description is absent for a harder reason: see gdUpdateBody.
   return out;
 }

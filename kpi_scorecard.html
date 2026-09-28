@@ -213,6 +213,25 @@
 <script>
 
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+/* Every case request carries who is asking. Editors send their personal token,
+   supervisors the password they entered; the Worker decides (worker/auth.js). */
+let EDITOR_TOKEN='';
+const SPV_KEY_STORE='kpiSpvKey';
+function spvKey(){try{return sessionStorage.getItem(SPV_KEY_STORE)||'';}catch(e){return '';}}
+function authHeaders(extra){
+  const h=Object.assign({},extra||{});
+  if(EDITOR_TOKEN)h['x-editor-token']=EDITOR_TOKEN;
+  const k=spvKey();if(k)h['x-spv-key']=k;
+  return h;
+}
+async function authFetch(path,opts){
+  const o=Object.assign({},opts||{});o.headers=authHeaders(o.headers);
+  const r=await fetch(`${WORKER_URL}${path}`,o);
+  // A supervisor whose password was changed since they entered it: forget it and
+  // show the password screen again rather than failing every request quietly.
+  if(r.status===401&&!EDITOR_TOKEN){try{sessionStorage.removeItem(SPV_KEY_STORE);}catch(e){}location.reload();}
+  return r;
+}
 const $=id=>document.getElementById(id);
 const LEVEL_LABEL={intern:"Intern",jr:"Jr",ve:"Video Editor (Associate)",senior:"Senior",spv:"Supervisor",principal:"Principal"};
 const LK=["intern","jr","ve","senior","spv","principal"];
@@ -238,7 +257,7 @@ async function loadConfig(){
   });
   KPI=order.map(c=>map[c]);
   const sl=(cfg.lists||[]).find(l=>l.key==='supervisors');
-  SUPERVISORS=sl&&Array.isArray(sl.value)?sl.value:['Rashy','Joshua'];
+  SUPERVISORS=sl&&Array.isArray(sl.value)?sl.value:["Joshua Ervin","Rashy Azhardwian","Julius Pandu"];
   CONFIG_VERSION=(cfg.lists||[]).find(l=>l.key==='version')?.value||null;
 }
 
@@ -273,6 +292,7 @@ function runBoot(){
     const params=new URLSearchParams(location.search);
     caseId=params.get('kpi')||'';
     const editorToken=params.get('e')||'';
+    EDITOR_TOKEN=editorToken;
     if(editorToken){
       try{
         const r=await fetch(`${WORKER_URL}/whoami?t=${encodeURIComponent(editorToken)}`);
@@ -281,7 +301,7 @@ function runBoot(){
       }catch(e){}
       renderPersonalLinkRequired(); return;
     }
-    if(caseId){ loadedFromLink=true; STAGE='supervisor'; loadCase(caseId).then(startSupervisor); return; }
+    if(caseId){ loadedFromLink=true; STAGE='supervisor'; requireSupervisor(()=>loadCase(caseId).then(startSupervisor)); return; }
     // No personal token and no case link -> this is a supervisor opening the form
     // directly. There's no more role choice to make: editors only ever arrive via
     // their own link (above), so a bare visit always means supervisor.
@@ -303,25 +323,38 @@ function enterEditor(){
   STAGE='editor';stepIdx=0;curLevel=MY_IDENTITY.level;buildCtx('editor');showNav();resetEditorScores();maybeEditorId();
 }
 function enterSupervisor(){STAGE='supervisor';stepIdx=0;buildCtx('supervisor');showNav();render();}
-const SPV_PASSWORD='Planaria-admin';
-function enterSupervisorGated(){
-  if(sessionStorage.getItem('kpiSpvOk')==='1'){enterSupervisor();return;}
+/* ===== supervisor access =====
+   The password is checked by the Worker (/spv/check, against the SPV_KEY secret),
+   never by this page. It is kept in sessionStorage for this tab only and sent as
+   the x-spv-key header on every supervisor request; the Worker refuses case reads
+   and filing without it. Editors never see this screen: they arrive on their
+   personal link, and their token only opens their own case. See worker/auth.js. */
+function requireSupervisor(then){
+  if(spvKey()){then();return;}
   hideNav();
   $('stageHost').innerHTML=`<div class="gate">
     <h1>Supervisor access</h1>
     <p>Enter the supervisor password to continue.</p>
-    <input type="password" id="spvPass" style="width:100%;max-width:320px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;margin:14px auto 0;display:block">
+    <input type="password" id="spvPass" autocomplete="current-password" style="width:100%;max-width:320px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;margin:14px auto 0;display:block">
     <div id="spvGateErr" class="err" hidden style="margin:8px 0 10px"></div>
     <button class="btn primary" id="spvGateGo" style="margin-top:14px">Continue</button>
   </div>`;
-  const go=()=>{
-    if($('spvPass').value===SPV_PASSWORD){sessionStorage.setItem('kpiSpvOk','1');enterSupervisor();}
-    else{$('spvGateErr').textContent='Wrong password.';$('spvGateErr').hidden=false;$('spvPass').value='';$('spvPass').focus();}
+  const fail=(msg)=>{$('spvGateErr').textContent=msg;$('spvGateErr').hidden=false;$('spvPass').value='';$('spvPass').focus();};
+  const go=async()=>{
+    const v=$('spvPass').value.trim();if(!v)return;
+    const b=$('spvGateGo');b.disabled=true;b.textContent='Checking…';
+    let res=null;
+    try{res=await fetch(`${WORKER_URL}/spv/check`,{headers:{'x-spv-key':v}});}catch(e){}
+    b.disabled=false;b.textContent='Continue';
+    if(res&&res.ok){try{sessionStorage.setItem(SPV_KEY_STORE,v);}catch(e){}then();return;}
+    if(res&&res.status===401){fail('Wrong password.');return;}
+    fail('Couldn’t reach the server to check the password. Try again in a moment.');
   };
   $('spvGateGo').onclick=go;
   $('spvPass').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
   $('spvPass').focus();
 }
+function enterSupervisorGated(){requireSupervisor(enterSupervisor);}
 /* ===== draft (see draft.js) =====
    Keyed per case AND per stage: the editor's sitting and the supervisor's are
    different drafts of different work on the same case, and two supervisors on
@@ -440,7 +473,7 @@ async function maybeEditorId(){
   const emp=$('employee').value,q=$('quarter').value.trim();
   if(!emp||!q){$('idAuto').textContent='—';caseId='';setNote('');EDITOR_LOCKED_ELSEWHERE=false;renderEditorBlockState();return;}
   try{
-    const or=await fetch(`${WORKER_URL}/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`);
+    const or=await authFetch(`/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`);
     const oj=await or.json();
     if(oj.open&&oj.editor_locked){
       caseId=oj.id;$('idAuto').textContent=caseId;
@@ -452,7 +485,7 @@ async function maybeEditorId(){
       // Resume the existing draft or admin-precreated placeholder -- don't mint a new id.
       caseId=oj.id;$('idAuto').textContent=caseId;setNote('');
     }else{
-      const nr=await fetch(`${WORKER_URL}/kpi/next-id?quarter=${encodeURIComponent(q)}&editor=${encodeURIComponent(emp)}`);
+      const nr=await authFetch(`/kpi/next-id?quarter=${encodeURIComponent(q)}&editor=${encodeURIComponent(emp)}`);
       const j=await nr.json();caseId=j.id||'';$('idAuto').textContent=caseId||'—';setNote('');
     }
     renderEditorBlockState();
@@ -479,7 +512,7 @@ async function findOpenCaseForSpv(){
   const emp=$('employee').value,q=$('quarter').value.trim();
   if(!emp||!q){$('idAuto').textContent='—';caseId='';KPICASE=null;render();return;}
   try{
-    const or=await fetch(`${WORKER_URL}/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`);
+    const or=await authFetch(`/kpi/open?editor=${encodeURIComponent(emp)}&quarter=${encodeURIComponent(q)}`);
     const oj=await or.json();
     setNote('');
     if(!oj.open){
@@ -488,7 +521,7 @@ async function findOpenCaseForSpv(){
       $('idAuto').textContent='—';caseId='';KPICASE=null;render();return;
     }
     if(!oj.editor_locked){setNote(`<b>${emp}</b> started ${oj.id} but hasn't locked their self-review yet. Ask them to finish first.`,'warn');$('idAuto').textContent='—';caseId='';KPICASE=null;render();return;}
-    const gr=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(oj.id)}`);const gj=await gr.json();
+    const gr=await authFetch(`/kpi/${encodeURIComponent(oj.id)}`);const gj=await gr.json();
     if(!gj.found){setNote(`Case ${oj.id} could not be loaded — try again.`,'warn');return;}
     KPICASE=gj.case;caseId=oj.id;$('idAuto').textContent=caseId;
     hydrateFromCase(KPICASE);render();restoreDraft();
@@ -497,7 +530,7 @@ async function findOpenCaseForSpv(){
 function setNote(html,kind){let n=$('ctxNote');if(!n){n=document.createElement('div');n.id='ctxNote';n.className='note';$('ctxHost').appendChild(n);}if(!html){n.hidden=true;return;}n.hidden=false;n.className='note'+(kind==='warn'?' warn':'');n.innerHTML=html;}
 
 async function loadCase(id){
-  try{const r=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(id)}`);const j=await r.json();
+  try{const r=await authFetch(`/kpi/${encodeURIComponent(id)}`);const j=await r.json();
     if(j.found)KPICASE=j.case;}catch(e){}
 }
 function startSupervisor(){
@@ -777,7 +810,7 @@ async function lockEditor(){
   const payload={id:caseId,editor:$('employee').value,level:curLevel,quarter:$('quarter').value.trim(),
     editor_data:buildEditorData(),self_overall:overall('self'),config_version:CONFIG_VERSION};
   try{
-    const r=await fetch(`${WORKER_URL}/kpi/editor`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const r=await authFetch(`/kpi/editor`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
     clearDraft(); // locked server-side now; a leftover draft could only ever re-offer stale answers
     showDone('editor',payload.id);
@@ -820,7 +853,7 @@ async function fileFinal(){
   const payload={id:caseId,supervisor:'Supervisor',official_kpi:overall('spv'),
     categories:buildFinalCategories(),focus:buildFinalFocus(),spv_summary:buildFinalSummary()};
   try{
-    const r=await fetch(`${WORKER_URL}/kpi/finalize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const r=await authFetch(`/kpi/finalize`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
     clearDraft(); // filed; the case is closed and the draft can only be noise from here
     showDone('filed',caseId,j);

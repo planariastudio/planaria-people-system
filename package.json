@@ -13,6 +13,7 @@
     "preflight": "node scripts/goodday_preflight.mjs",
     "provision": "node scripts/provision_goodday_people.mjs",
     "structure": "node scripts/goodday_structure.mjs",
+    "stage-times": "node scripts/goodday_stage_times.mjs",
     "smoke": "node scripts/goodday_bridge_smoke.mjs"
   },
   "devDependencies": {
