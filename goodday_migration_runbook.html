@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoodDay Migration Runbook</title>
+<style>
+:root{
+  --canvas:#f7f7f8; --card:#fff; --ink:#17191d; --muted:#6b7280; --line:#e6e8eb;
+  --kpi:#4f46e5; --peer:#0d9488; --pip:#b45309;
+  --lo:#e0603b; --mid:#e3a008; --mid-ink:#b45309; --hi:#2f9e7e;
+  --accent:var(--kpi);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --canvas:#111317; --card:#1b1e24; --ink:#f2f3f5; --muted:#9aa1ab; --line:#2b2f37;
+  }
+}
+:root[data-theme="dark"]{
+  --canvas:#111317; --card:#1b1e24; --ink:#f2f3f5; --muted:#9aa1ab; --line:#2b2f37;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+.wrap{max-width:860px;margin:0 auto;padding:28px 16px 80px;}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 20px}
+.bar{height:10px;border-radius:999px;background:var(--line);overflow:hidden;margin:14px 0 6px}
+.bar>i{display:block;height:100%;background:var(--hi);width:0;transition:width .25s}
+.barlbl{font-size:13px;color:var(--muted);margin-bottom:22px}
+.phase{background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:16px 18px;margin:0 0 16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.phase h2{font-size:16px;margin:0 0 2px;display:flex;align-items:center;gap:9px}
+.phase .lede{color:var(--muted);font-size:13px;margin:0 0 12px}
+.dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:var(--accent)}
+.step{display:flex;gap:11px;padding:9px 0;border-top:1px solid var(--line)}
+.step:first-of-type{border-top:0}
+.step input{margin:3px 0 0;width:17px;height:17px;flex:0 0 auto;accent-color:var(--hi);cursor:pointer}
+.step .body{flex:1}
+.step .t{font-weight:600}
+.step .d{color:var(--muted);font-size:13px;margin-top:2px}
+.step code{background:var(--canvas);border:1px solid var(--line);border-radius:5px;
+  padding:1px 6px;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.step.done .t,.step.done .d{text-decoration:line-through;opacity:.5}
+.who{font-size:11px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:6px;
+  white-space:nowrap;height:fit-content}
+.who.you{background:#fdeee6;color:var(--pip)}
+.who.me{background:#ecebfb;color:var(--kpi)}
+.who.wait{background:#fef6e0;color:var(--mid-ink)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .who.you{background:#3a2a1e}
+  :root:not([data-theme="light"]) .who.me{background:#26243d}
+  :root:not([data-theme="light"]) .who.wait{background:#332a12}}
+.done-badge{background:#e5f5ee;color:var(--hi);border:1px solid var(--hi);
+  font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+.note{background:var(--canvas);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+  padding:10px 13px;font-size:13px;margin:16px 0 6px;color:var(--ink)}
+.note b{color:var(--accent)}
+.warn{border-left-color:var(--lo)}.warn b{color:var(--lo)}
+.foot{display:flex;justify-content:space-between;align-items:center;margin:24px 0 0;gap:12px;flex-wrap:wrap}
+button.reset{background:transparent;border:1px solid var(--line);color:var(--muted);
+  border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer}
+.legend{font-size:12px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GoodDay Migration Runbook</h1>
+  <p class="sub">Cutting the People System from ClickUp to GoodDay. Code is done and deployed; the flag is off. Checkboxes save on this device.</p>
+
+  <div class="legend">
+    <span><b class="who you">YOU</b> needs your login</span>
+    <span><b class="who me">CLAUDE</b> I do it</span>
+    <span><b class="who wait">WAIT</b> waiting on people</span>
+  </div>
+
+  <div class="bar"><i id="fill"></i></div>
+  <div class="barlbl" id="prog">0 of 0 done</div>
+
+  <div class="note"><b>Rollback is always one step:</b> unset the <code>GOODDAY_ENABLED</code> secret. No redeploy. Everything routes back to ClickUp instantly. That is the whole point of the flag.</div>
+
+  <div id="phases"></div>
+
+  <div class="foot">
+    <span class="barlbl" id="prog2"></span>
+    <button class="reset" id="reset">Reset all checkboxes</button>
+  </div>
+</div>
+
+<script>
+const PHASES=[
+ {t:"Phase 1 — prove the flag-off state is clean",lede:"~30 min. Confirm nothing is broken before touching GoodDay.",steps:[
+   {who:"you",t:"Run npx wrangler secret list",d:"Paste me the output (names only). We confirm SUPABASE_URL and CLICKUP_SPACE_ID are secrets, not plaintext vars."},
+   {who:"me",t:"Validate the secret list",d:"I check every env.X the worker reads is a secret or in [vars]. A deploy wipes plaintext vars — that outage happened twice."},
+   {who:"you",t:"Open links_admin.html, run /selftest",d:"Confirm green across Supabase, ClickUp, and Sheet config."},
+ ]},
+ {t:"Phase 2 — get people into GoodDay",lede:"The slow part. Migration cannot proceed until editors have accounts.",steps:[
+   {who:"you",t:"Invite all 10 editors + supervisors to GoodDay",d:"I cannot do this — standing rule. goodDayResolveUserId matches by name; anyone without an account gets unassigned tasks and no notification."},
+   {who:"wait",t:"Wait for invites to be accepted",d:"Hard gate. No point provisioning until they exist in GoodDay."},
+   {who:"you",t:"Run npm run provision",d:"One project per person under People > Performance Records. Dry-run by default; re-reads to prove no duplicates. I'll read the output with you."},
+ ]},
+ {t:"Phase 3 — set GoodDay secrets and smoke test",lede:"~15 min. A 200 from GoodDay proves nothing — smoke is the real check.",steps:[
+   {who:"you",t:"Set GOODDAY_TOKEN, GOODDAY_BOT_USER_ID, GOODDAY_TEAM_ID as secrets",d:"Via wrangler secret put. Never paste tokens into chat."},
+   {who:"you",t:"Run npm run smoke against one real person",d:"Runs the real KPI sequence against live GoodDay and reads back what stored: PDF-on-task, assignment, status."},
+   {who:"me",t:"Read the smoke output with you",d:"Confirm the PDF is ON the task, the assignee resolved, and status landed."},
+ ]},
+ {t:"Phase 4 — flip the switch",lede:"~5 min. Instant rollback if anything is wrong.",steps:[
+   {who:"you",t:"Set secret GOODDAY_ENABLED=1",d:"Every task op now routes to GoodDay. Same call sites, different destination."},
+   {who:"you",t:"File one real test case end-to-end",d:"Confirm the assignee actually gets notified in GoodDay."},
+   {who:"you",t:"If wrong: unset GOODDAY_ENABLED",d:"Rolls back to ClickUp with no redeploy."},
+ ]},
+ {t:"Phase 5 — finish up",lede:"Automations are already built. Remaining: guides + key rotation.",steps:[
+   {who:"you",t:"Rotate PEER_ADMIN_KEY",d:"The old 'Planaria-admin' key is public in git history. The portal now prompts for the key, so rotating self-heals. Do this after the admin-key fix ships."},
+   {who:"me",t:"Rewrite both guide sites for GoodDay wording",d:"BLOCKED: the guide repos aren't in this cloud container — they're on your local machine. Needs a local session, or push them somewhere I can reach."},
+ ]},
+];
+const DONE=[
+ {t:"Worker code + deploy",d:"GoodDay dispatch layer shipped to main, behind GOODDAY_ENABLED, flag off."},
+ {t:"The 5 GoodDay automation rules",d:"P1–P5 built and enabled 2026-09-19, scoped to Performance Records. Do NOT rebuild — you'll create duplicates."},
+ {t:"Admin key removed from page source",d:"links_admin.html now prompts for the key and stores it in localStorage (shipped this session)."},
+];
+
+const KEY='gd_migration_v1';
+let state={};try{state=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}};
+const WHO={you:"YOU",me:"CLAUDE",wait:"WAIT"};
+const host=document.getElementById('phases');
+let idx=0,total=0;
+
+// Already-done banner
+const doneWrap=document.createElement('div');
+doneWrap.className='phase';
+doneWrap.innerHTML='<h2><span class="dot" style="background:var(--hi)"></span>Already done</h2>'+
+  '<p class="lede">Confirmed complete. Nothing to do here.</p>'+
+  DONE.map(x=>`<div class="step"><span class="done-badge">DONE</span><div class="body"><div class="t">${x.t}</div><div class="d">${x.d}</div></div></div>`).join('');
+host.appendChild(doneWrap);
+
+PHASES.forEach((p,pi)=>{
+  const el=document.createElement('div');el.className='phase';
+  let html=`<h2><span class="dot"></span>${p.t}</h2><p class="lede">${p.lede}</p>`;
+  p.steps.forEach((s,si)=>{
+    const id=`p${pi}s${si}`;total++;
+    const on=state[id]?' checked':'';
+    html+=`<label class="step${state[id]?' done':''}" data-id="${id}">`+
+      `<input type="checkbox"${on}>`+
+      `<div class="body"><div class="t">${s.t}</div><div class="d">${s.d}</div></div>`+
+      `<span class="who ${s.who}">${WHO[s.who]}</span></label>`;
+  });
+  el.innerHTML=html;host.appendChild(el);
+});
+
+function refresh(){
+  const n=Object.values(state).filter(Boolean).length;
+  const pct=total?Math.round(n/total*100):0;
+  document.getElementById('fill').style.width=pct+'%';
+  const txt=`${n} of ${total} steps done · ${pct}%`;
+  document.getElementById('prog').textContent=txt;
+  document.getElementById('prog2').textContent=txt;
+}
+host.addEventListener('change',e=>{
+  if(e.target.type!=='checkbox')return;
+  const lbl=e.target.closest('.step'),id=lbl.dataset.id;
+  state[id]=e.target.checked;lbl.classList.toggle('done',e.target.checked);
+  save();refresh();
+});
+document.getElementById('reset').onclick=()=>{
+  state={};save();
+  document.querySelectorAll('.step[data-id] input').forEach(i=>i.checked=false);
+  document.querySelectorAll('.step[data-id]').forEach(l=>l.classList.remove('done'));
+  refresh();
+};
+refresh();
+</script>
+</body>
+</html>
