@@ -6,9 +6,11 @@
   Merged to origin/main as PR #1 and #2 (incl. its own `HANDOFF_2026-09-28.md` and
   `goodday_migration_runbook.html`); fix branch `claude/goodday-embed-and-fixes`
   (commit a9841fc) is still ONLY on the laptop until pushed from there.
-Merge plan: push the laptop branch, then on the main PC fetch, bring origin/main and
-that branch into `goodday-migration`, resolve the `/selftest` secrets list in
-worker/index.js (both sides edit it), rerun `npm run verify`. Read the laptop's
+**MERGED 28 Sep, evening (main PC):** `goodday-migration` now contains origin/main
+(d172f80) and `claude/goodday-embed-and-fixes` (ff26c4e). One conflict, links_admin.html,
+resolved by taking the laptop's embed-safe key form whole. After the merge: `npm run check`
+passes, `npm test` 89/89, 22/22 route checks against the real Worker. Not pushed. Next:
+push the branch and open a PR so CI runs, then the deploy steps below. Read the laptop's
 `HANDOFF_2026-09-28.md` and its cutover page too: it found that "Eduardus Kent Sutanza"
 (roster) vs "Kent Sutanza" (GoodDay) and Rafli Ibrahim (no GoodDay account) would file
 unassigned, and that only GOODDAY_BOT_USER_ID is missing from the Worker secrets.
