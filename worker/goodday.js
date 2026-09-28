@@ -54,6 +54,33 @@ async function gdErrText(res) {
 
 const norm = (s) => String(s || "").trim().toLowerCase();
 
+// Roster names the Google Sheet stores that neither match a GoodDay display name
+// exactly nor via the prefix fallback, because the two systems spell the same
+// person differently in a way that is not a shared prefix. Keyed by normalised
+// roster name; the value is the GoodDay display name to resolve against instead.
+//
+// GoodDay is the source of truth for the display name. If an account is renamed,
+// fix the value here, or override the whole map at runtime with the
+// GOODDAY_NAME_ALIASES secret (a JSON object, same shape). Confirmed live 28 Sep
+// 2026: without this, "Eduardus Kent Sutanza" resolved to null and his review
+// would file to an unassigned task with nobody notified.
+//
+// NOT a place for people with no GoodDay account at all (e.g. Rafli Ibrahim, not
+// invited): an alias only redirects a name, it cannot conjure a user. Invite
+// them, and they resolve by name with no entry here.
+const GD_NAME_ALIASES_DEFAULT = { "eduardus kent sutanza": "Kent Sutanza" };
+
+function gdNameAliases(env) {
+  const merged = { ...GD_NAME_ALIASES_DEFAULT };
+  try {
+    if (env && env.GOODDAY_NAME_ALIASES) {
+      const extra = JSON.parse(env.GOODDAY_NAME_ALIASES);
+      for (const [k, v] of Object.entries(extra)) merged[norm(k)] = v;
+    }
+  } catch (e) { /* a malformed override falls back to the built-in default */ }
+  return merged;
+}
+
 // ---------------------------------------------------------------------------
 // Users
 // ---------------------------------------------------------------------------
@@ -64,8 +91,13 @@ const norm = (s) => String(s || "").trim().toLowerCase();
 // then by name. Email is tried first because two people can share a display name
 // and nobody shares a mailbox.
 async function goodDayResolveUserId(env, nameOrEmail) {
-  const want = norm(nameOrEmail);
+  let want = norm(nameOrEmail);
   if (!want) return null;
+  // Redirect a known-mismatched roster name to the GoodDay display name before
+  // any matching. An email never appears in the alias map, so this only ever
+  // touches names.
+  const alias = gdNameAliases(env)[want];
+  if (alias) want = norm(alias);
   try {
     const res = await gdCall(env, "GET", "/users");
     if (!res.ok) return null;
