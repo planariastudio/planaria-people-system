@@ -257,7 +257,7 @@ async function loadConfig(){
   });
   KPI=order.map(c=>map[c]);
   const sl=(cfg.lists||[]).find(l=>l.key==='supervisors');
-  SUPERVISORS=sl&&Array.isArray(sl.value)?sl.value:['Rashy','Joshua'];
+  SUPERVISORS=sl&&Array.isArray(sl.value)?sl.value:["Joshua Ervin","Rashy Azhardwian","Julius Pandu"];
   CONFIG_VERSION=(cfg.lists||[]).find(l=>l.key==='version')?.value||null;
 }
 

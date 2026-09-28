@@ -171,25 +171,59 @@ let ROSTER=[];
 
 // Ask for the key and remember it. Returns false only if the person dismisses the
 // prompt. Storage is best-effort: if it's blocked, KEY still holds for this sitting.
+// Ask for the key and remember it. Returns a Promise<boolean>, false only if the
+// person dismisses it. Storage is best-effort: if it's blocked, KEY still holds
+// for this sitting.
+//
+// This used to be window.prompt(). Chrome blocks prompt/alert/confirm from a
+// CROSS-ORIGIN iframe, and this page is embedded in GoodDay as an Embed View
+// (planariastudio.github.io inside goodday.work), so the dialog never appeared:
+// KEY stayed empty, every api() call 401'd, and there was no way to type the key
+// at all. An in-page form is the only thing that works in both places.
+//
+// Note for the embed: localStorage in a third-party iframe is partitioned by
+// top-level site, so a key entered in a normal tab is NOT visible here. Entering
+// it once inside GoodDay is expected, not a bug.
 function promptKey(msg){
-  const k=(window.prompt(msg||'Enter the admin key for the People System portal.','')||'').trim();
-  if(k){ KEY=k; try{ localStorage.setItem(KEY_STORE,k); }catch(e){} }
-  return !!k;
+  return new Promise(resolve=>{
+    let host=document.getElementById('keyGate');
+    if(!host){
+      host=document.createElement('div');
+      host.id='keyGate';
+      host.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(23,25,29,.45);padding:20px';
+      host.innerHTML='<form style="background:var(--card,#fff);border:1px solid var(--line,#e6e8eb);border-radius:12px;padding:22px 24px;max-width:380px;width:100%;font:13.5px/1.45 Inter,-apple-system,\'Segoe UI\',Roboto,system-ui,sans-serif">'+
+        '<div id="keyGateMsg" style="margin-bottom:12px;color:var(--ink,#17191d)"></div>'+
+        '<input id="keyGateIn" type="password" autocomplete="current-password" placeholder="Admin key" style="width:100%;padding:9px 11px;border:1px solid var(--line,#e6e8eb);border-radius:8px;font:inherit;margin-bottom:12px">'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+        '<button type="button" id="keyGateNo" style="padding:8px 14px;border:1px solid var(--line,#e6e8eb);background:#fff;border-radius:8px;font:inherit;cursor:pointer">Cancel</button>'+
+        '<button type="submit" style="padding:8px 14px;border:0;background:var(--accent,#4f46e5);color:#fff;border-radius:8px;font:inherit;cursor:pointer">Unlock</button>'+
+        '</div></form>';
+      document.body.appendChild(host);
+    }
+    const form=host.querySelector('form'), input=host.querySelector('#keyGateIn');
+    host.querySelector('#keyGateMsg').textContent=msg||'Enter the admin key for the People System portal.';
+    host.style.display='flex';
+    input.value='';
+    setTimeout(()=>input.focus(),0);
+    const done=(val)=>{ host.style.display='none'; form.onsubmit=null; host.querySelector('#keyGateNo').onclick=null; resolve(val); };
+    form.onsubmit=(e)=>{ e.preventDefault(); const k=input.value.trim(); if(!k) return; KEY=k; try{ localStorage.setItem(KEY_STORE,k); }catch(e2){} done(true); };
+    host.querySelector('#keyGateNo').onclick=()=>done(false);
+  });
 }
-function ensureKey(){
-  while(!KEY){ if(!promptKey()) return false; }
+async function ensureKey(){
+  while(!KEY){ if(!(await promptKey())) return false; }
   return true;
 }
 function forgetKey(){ KEY=''; try{ localStorage.removeItem(KEY_STORE); }catch(e){} }
 
 async function api(path,opt){
-  if(!ensureKey()) throw new Error('Admin key required — reload the page to enter it.');
+  if(!(await ensureKey())) throw new Error('Admin key required — reload the page to enter it.');
   const sep=path.includes('?')?'&':'?';
   let r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
   if(r.status===401){
     // Stored key was wrong or has been rotated — drop it and ask once more.
     forgetKey();
-    if(promptKey('The admin key was rejected (it may have been rotated). Enter the current key.')){
+    if(await promptKey('The admin key was rejected (it may have been rotated). Enter the current key.')){
       r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
     }
     if(r.status===401){ forgetKey(); throw new Error('The Worker rejected the admin key. Reload and enter the current PEER_ADMIN_KEY.'); }
@@ -419,7 +453,7 @@ async function boot(){
   }
   // Prompt for the admin key once here, before any authed call fans out, so five
   // concurrent 401s don't stack five prompts. If dismissed, show how to proceed.
-  if(!ensureKey()){
+  if(!(await ensureKey())){
     document.getElementById('bootBanner').innerHTML='<div class="err" style="margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;border-radius:10px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">'+
       '<span>Admin key needed to load the portal.</span>'+
       '<button class="btn primary mini" id="keyRetry" type="button">Enter key</button></div>';
