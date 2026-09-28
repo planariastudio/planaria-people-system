@@ -158,17 +158,42 @@
 
 <script>
 const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
-// This page isn't linked from anywhere public — the URL itself is the access control,
-// so it goes straight to the table. The Worker still checks PEER_ADMIN_KEY server-side
-// (this constant must match that secret); this is not meant to stop someone who has
-// this page's URL, only to keep the API off-limits to anyone hitting it directly.
-const KEY='Planaria-admin';
+// The admin key is NOT baked into this page. It used to be a hardcoded constant,
+// but this repo is public and the page is served on GitHub Pages, so the key was
+// readable at raw.githubusercontent.com — the "unlisted URL" premise never held.
+// Now the page asks for it once, keeps it in localStorage on this device only, and
+// re-asks if the Worker rejects it (so rotating PEER_ADMIN_KEY self-heals here).
+// The Worker still enforces PEER_ADMIN_KEY server-side; this only feeds it the key.
+const KEY_STORE='planaria_admin_key';
+let KEY='';
+try{ KEY=localStorage.getItem(KEY_STORE)||''; }catch(e){ /* blocked storage: ask each load */ }
 let ROSTER=[];
 
+// Ask for the key and remember it. Returns false only if the person dismisses the
+// prompt. Storage is best-effort: if it's blocked, KEY still holds for this sitting.
+function promptKey(msg){
+  const k=(window.prompt(msg||'Enter the admin key for the People System portal.','')||'').trim();
+  if(k){ KEY=k; try{ localStorage.setItem(KEY_STORE,k); }catch(e){} }
+  return !!k;
+}
+function ensureKey(){
+  while(!KEY){ if(!promptKey()) return false; }
+  return true;
+}
+function forgetKey(){ KEY=''; try{ localStorage.removeItem(KEY_STORE); }catch(e){} }
+
 async function api(path,opt){
+  if(!ensureKey()) throw new Error('Admin key required — reload the page to enter it.');
   const sep=path.includes('?')?'&':'?';
-  const r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
-  if(r.status===401) throw new Error('The Worker rejected the admin key — PEER_ADMIN_KEY must be set to match this page.');
+  let r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
+  if(r.status===401){
+    // Stored key was wrong or has been rotated — drop it and ask once more.
+    forgetKey();
+    if(promptKey('The admin key was rejected (it may have been rotated). Enter the current key.')){
+      r=await fetch(`${WORKER_URL}${path}${sep}key=${encodeURIComponent(KEY)}`,opt);
+    }
+    if(r.status===401){ forgetKey(); throw new Error('The Worker rejected the admin key. Reload and enter the current PEER_ADMIN_KEY.'); }
+  }
   const j=await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
   return j;
@@ -391,6 +416,15 @@ async function boot(){
       document.getElementById('cQ').value='Q'+cm[1];document.getElementById('cY').value=cm[2];
       document.getElementById('kQ').value='Q'+cm[1];document.getElementById('kY').value=cm[2];
     }
+  }
+  // Prompt for the admin key once here, before any authed call fans out, so five
+  // concurrent 401s don't stack five prompts. If dismissed, show how to proceed.
+  if(!ensureKey()){
+    document.getElementById('bootBanner').innerHTML='<div class="err" style="margin:0 0 14px;padding:12px 16px;border:1px solid #f0c98a;background:#fdf3e8;border-radius:10px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">'+
+      '<span>Admin key needed to load the portal.</span>'+
+      '<button class="btn primary mini" id="keyRetry" type="button">Enter key</button></div>';
+    document.getElementById('keyRetry').onclick=boot;
+    return;
   }
   await Promise.all([loadAllLinks(),loadRows(),loadPeerScorecards(),loadKpiTracker(),loadPipTracker()]);
 }
