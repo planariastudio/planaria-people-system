@@ -216,8 +216,20 @@ const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
 /* Every case request carries who is asking. Editors send their personal token,
    supervisors the password they entered; the Worker decides (worker/auth.js). */
 let EDITOR_TOKEN='';
-const SPV_KEY_STORE='kpiSpvKey';
-function spvKey(){try{return sessionStorage.getItem(SPV_KEY_STORE)||'';}catch(e){return '';}}
+const SPV_KEY_STORE='kpiSpvKey';        // legacy per-tab key, still honoured on read
+const SPV_STORE='pplSpvAuth';           // shared across tabs + the PIP form, with an expiry
+const SPV_TTL_MS=12*60*60*1000;         // 12h: enter once per work session, not parked on disk forever
+// Read order: the shared, expiring store first (so a fresh tab or the PIP form
+// picks up a password already entered today), then the legacy per-tab value.
+function spvKey(){
+  try{const raw=localStorage.getItem(SPV_STORE);if(raw){const o=JSON.parse(raw);if(o&&o.k&&o.exp&&Date.now()<o.exp)return o.k;localStorage.removeItem(SPV_STORE);}}catch(e){}
+  try{return sessionStorage.getItem(SPV_KEY_STORE)||'';}catch(e){return '';}
+}
+// Write BOTH: the shared store (cross-tab, expiring) and the legacy per-tab key.
+function setSpvKey(v){
+  try{localStorage.setItem(SPV_STORE,JSON.stringify({k:v,exp:Date.now()+SPV_TTL_MS}));}catch(e){}
+  try{sessionStorage.setItem(SPV_KEY_STORE,v);}catch(e){}
+}
 function authHeaders(extra){
   const h=Object.assign({},extra||{});
   if(EDITOR_TOKEN)h['x-editor-token']=EDITOR_TOKEN;
@@ -346,7 +358,7 @@ function requireSupervisor(then){
     let res=null;
     try{res=await fetch(`${WORKER_URL}/spv/check`,{headers:{'x-spv-key':v}});}catch(e){}
     b.disabled=false;b.textContent='Continue';
-    if(res&&res.ok){try{sessionStorage.setItem(SPV_KEY_STORE,v);}catch(e){}then();return;}
+    if(res&&res.ok){setSpvKey(v);then();return;}
     if(res&&res.status===401){fail('Wrong password.');return;}
     fail('Couldn’t reach the server to check the password. Try again in a moment.');
   };

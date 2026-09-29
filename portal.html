@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Reviews</title>
+<!--
+  The editor's own private view: KPI history, peer assignments, PIP. Opened with a
+  personal link (?e=<peer_token>). Everything is scoped to that token server-side
+  (/whoami, /kpi/mine, /peer/my-assignments, /pip/mine all return only the caller's
+  own rows), so this page never has to know a supervisor password. Built to embed in
+  each editor's own GoodDay project; links out open in a NEW TAB so an embedded
+  reader is never stranded inside the GoodDay frame.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  :root{
+    /* Shared People System visual contract (see kpi_scorecard.html). */
+    --canvas:#f7f7f8;--card:#fff;--ink:#17191d;--muted:#6b7280;--faint:#9aa1ab;--line:#e6e8eb;--line2:#eef0f2;
+    --kpi:#4f46e5;--peer:#0d9488;--pip:#b45309;
+    --kpi-soft:#eef0fe;--peer-soft:#e6f5f2;--pip-soft:#fbf1e4;
+    --lo:#e0603b;--mid:#e3a008;--hi:#2f9e7e;
+    --shadow:0 8px 24px rgba(20,22,28,.07);
+    --font:Inter,-apple-system,"Segoe UI",Roboto,system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+    --canvas:#121317;--card:#1c1e23;--ink:#e8eaed;--muted:#9aa1ab;--faint:#767d88;--line:#2b2f36;--line2:#23262c;
+    --kpi:#8b87f5;--peer:#2dd4bf;--pip:#e0a458;
+    --kpi-soft:#23233c;--peer-soft:#0f312e;--pip-soft:#382b17;
+    --lo:#f0795a;--mid:#f0c04a;--hi:#4cc79c;--shadow:0 8px 24px rgba(0,0,0,.35);color-scheme:dark;
+  }}
+  *{box-sizing:border-box}html,body{margin:0}
+  body{background:var(--canvas);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;
+       -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+  .wrap{max-width:660px;margin:0 auto;padding:22px 16px 96px}
+  a{color:inherit}
+  :focus-visible{outline:2px solid var(--kpi);outline-offset:2px}
+
+  .head{display:flex;align-items:center;gap:13px;margin-bottom:18px}
+  .avatar{width:46px;height:46px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;
+          font-weight:700;font-size:16px;color:#fff;background:linear-gradient(135deg,var(--kpi),var(--peer))}
+  .head .cap{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.14em;font-weight:700}
+  .head h1{margin:1px 0 0;font-size:21px;letter-spacing:-.02em;font-weight:800}
+
+  .tabs{position:sticky;top:0;z-index:10;display:flex;gap:6px;background:var(--canvas);padding:6px 0 10px}
+  .tab{flex:1;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:11px;padding:11px 8px 10px;
+       cursor:pointer;font:inherit;color:var(--muted);text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .tab .dot{width:9px;height:9px;border-radius:50%;background:currentColor;opacity:.55}
+  .tab .tn{font-weight:700;font-size:13.5px;letter-spacing:-.01em}
+  .tab .ts{font-size:11px;color:var(--faint);font-weight:600}
+  .tab[aria-selected="true"]{color:var(--ink);border-color:currentColor;box-shadow:var(--shadow)}
+  .tab.kpi[aria-selected="true"]{color:var(--kpi)} .tab.peer[aria-selected="true"]{color:var(--peer)} .tab.pip[aria-selected="true"]{color:var(--pip)}
+  .tab[aria-selected="true"] .dot{opacity:1}
+  .tab[aria-selected="true"] .ts{color:inherit;opacity:.85}
+
+  .panel[hidden]{display:none}
+  .sec{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin:4px 2px 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 17px;margin-bottom:13px}
+  .hint{color:var(--muted);font-size:13px;margin:0 2px 14px}
+
+  .qrow{display:flex;align-items:center;gap:15px}
+  .score{flex:none;width:60px;height:60px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--kpi-soft);color:var(--kpi)}
+  .score b{font-size:20px;font-weight:800;line-height:1}.score span{font-size:9.5px;font-weight:700;letter-spacing:.05em;opacity:.75;margin-top:2px}
+  .qmeta{flex:1;min-width:0}.qmeta .qt{font-weight:700;font-size:16px}.qmeta .qs{color:var(--muted);font-size:13px;margin-top:2px}
+  .band{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;border-radius:99px;padding:3px 10px;margin-top:7px}
+  .band::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+  .band.hi{color:var(--hi);background:color-mix(in srgb,var(--hi) 15%,transparent)}
+  .band.mid{color:var(--mid);background:color-mix(in srgb,var(--mid) 16%,transparent)}
+  .band.lo{color:var(--lo);background:color-mix(in srgb,var(--lo) 15%,transparent)}
+  .qactions{margin-top:14px}
+
+  .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 13px;
+       font:inherit;font-weight:600;font-size:13.5px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;text-decoration:none}
+  .btn.primary{background:var(--kpi);border-color:var(--kpi);color:#fff}
+  .btn.peer{background:var(--peer);border-color:var(--peer);color:#fff}
+
+  .prow{display:flex;align-items:center;gap:13px;padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:var(--card);margin-bottom:10px}
+  .pav{width:38px;height:38px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;background:var(--peer)}
+  .pinfo{flex:1;min-width:0}.pinfo .pn{font-weight:700}
+  .pill{font-size:11px;font-weight:700;border-radius:99px;padding:2px 9px;display:inline-flex;align-items:center;gap:5px}
+  .pill.done{color:var(--hi);background:color-mix(in srgb,var(--hi) 15%,transparent)}
+  .pill.todo{color:var(--pip);background:var(--pip-soft)}
+
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:14px;margin-top:6px}
+  .kv .k{color:var(--muted)} .kv .v{font-weight:600;text-align:right}
+
+  .empty{text-align:center;padding:32px 18px}
+  .empty .ic{width:50px;height:50px;border-radius:50%;margin:0 auto 13px;display:flex;align-items:center;justify-content:center;background:var(--pip-soft);color:var(--pip)}
+  .empty h3{margin:0 0 5px;font-size:16px}
+  .empty p{margin:0;color:var(--muted);font-size:13.5px;max-width:34ch;margin-inline:auto}
+  .loading{color:var(--faint);font-size:13px;padding:8px 2px}
+  .foot{color:var(--faint);font-size:11.5px;text-align:center;margin-top:26px;line-height:1.6}
+
+  .gate{max-width:420px;margin:14vh auto 0;text-align:center;padding:0 20px}
+  .gate h1{font-size:20px;margin:0 0 8px}.gate p{color:var(--muted);margin:0}
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate" hidden>
+  <h1>This link isn't recognized</h1>
+  <p>Open your reviews using the personal link from your GoodDay project, or ask Rashy for a fresh one.</p>
+</div>
+
+<div id="app" class="wrap" hidden>
+  <div class="head">
+    <div class="avatar" id="avatar">--</div>
+    <div><div class="cap">My reviews</div><h1 id="who">&nbsp;</h1></div>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="My reviews">
+    <button class="tab kpi" role="tab" aria-selected="true" aria-controls="p-kpi" id="t-kpi" data-tab="kpi">
+      <span class="dot"></span><span class="tn">My KPI</span><span class="ts" id="c-kpi">&nbsp;</span></button>
+    <button class="tab peer" role="tab" aria-selected="false" aria-controls="p-peer" id="t-peer" data-tab="peer">
+      <span class="dot"></span><span class="tn">My Peer</span><span class="ts" id="c-peer">&nbsp;</span></button>
+    <button class="tab pip" role="tab" aria-selected="false" aria-controls="p-pip" id="t-pip" data-tab="pip">
+      <span class="dot"></span><span class="tn">My PIP</span><span class="ts" id="c-pip">&nbsp;</span></button>
+  </div>
+
+  <section class="panel" id="p-kpi" role="tabpanel" aria-labelledby="t-kpi">
+    <div class="sec">Your quarterly scorecards</div>
+    <div id="kpi-body"><div class="loading">Loading your KPI history...</div></div>
+  </section>
+  <section class="panel" id="p-peer" role="tabpanel" aria-labelledby="t-peer" hidden>
+    <div class="sec" id="peer-sec">People you were asked to assess</div>
+    <div id="peer-body"><div class="loading">Loading your peer assignments...</div></div>
+  </section>
+  <section class="panel" id="p-pip" role="tabpanel" aria-labelledby="t-pip" hidden>
+    <div id="pip-body"><div class="loading">Loading...</div></div>
+  </section>
+
+  <div class="foot">Only your own KPI, Peer and PIP &middot; Planaria People System</div>
+</div>
+
+<script>
+const WORKER_URL='https://planaria-people-worker.planariastudio.workers.dev';
+const TOKEN=new URLSearchParams(location.search).get('e')||'';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=p=>fetch(WORKER_URL+p).then(r=>r.ok?r.json():Promise.reject(r.status));
+function quarter(){const d=new Date();return 'Q'+(Math.floor(d.getMonth()/3)+1)+' '+d.getFullYear();}
+function initials(name){return (String(name||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('')||'?').toUpperCase();}
+function band(v){const n=Number(v);if(!isFinite(n))return['mid','On track'];if(n>=4)return['hi','Strong'];if(n>=3)return['mid','On track'];return['lo','Needs support'];}
+const CYCLE=quarter();
+
+/* ---- tabs ---- */
+const tabs=[].slice.call(document.querySelectorAll('.tab'));
+const panels={kpi:$('p-kpi'),peer:$('p-peer'),pip:$('p-pip')};
+function show(name){
+  if(!panels[name])name='kpi';
+  tabs.forEach(t=>t.setAttribute('aria-selected',t.dataset.tab===name?'true':'false'));
+  Object.keys(panels).forEach(k=>panels[k].hidden=(k!==name));
+  try{history.replaceState(null,'','#'+name);}catch(e){}
+}
+tabs.forEach(t=>{
+  t.addEventListener('click',()=>show(t.dataset.tab));
+  t.addEventListener('keydown',e=>{const i=tabs.indexOf(t);
+    if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();const n=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];n.focus();show(n.dataset.tab);}});
+});
+
+/* ---- render ---- */
+function renderKpi(d){
+  const cases=(d&&d.cases)||[];
+  $('c-kpi').textContent=cases.length?(cases.length+(cases.length>1?' quarters':' quarter')):'None yet';
+  if(!cases.length){ $('kpi-body').innerHTML='<div class="card"><div class="empty"><h3>No filed scorecards yet</h3><p>Once a KPI review is filed for you, every quarter shows up here.</p></div></div>'; return; }
+  $('kpi-body').innerHTML=cases.map(c=>{
+    const [cls,label]=band(c.official_kpi);
+    const off=(c.official_kpi==null)?'--':Number(c.official_kpi).toFixed(1);
+    const self=(c.self_overall==null)?null:Number(c.self_overall).toFixed(1);
+    const url='kpi_result_card.html?kpi='+encodeURIComponent(c.id)+'&e='+encodeURIComponent(TOKEN);
+    return '<div class="card"><div class="qrow">'
+      +'<div class="score"><b>'+off+'</b><span>'+esc(c.quarter)+'</span></div>'
+      +'<div class="qmeta"><div class="qt">'+esc(c.quarter)+'</div>'
+      +'<div class="qs">Filed'+(self?(' &middot; your self-score '+self):'')+'</div>'
+      +'<span class="band '+cls+'">'+label+'</span></div></div>'
+      +'<div class="qactions"><a class="btn primary" target="_blank" rel="noopener" href="'+url+'">Open full report</a></div></div>';
+  }).join('');
+}
+function renderPeer(d){
+  const a=(d&&d.assignments)||[];
+  const todo=a.filter(x=>!x.done).length;
+  $('c-peer').textContent=a.length?(todo?todo+' to do':'All done'):'None';
+  $('peer-sec').textContent='People you were asked to assess · '+CYCLE;
+  if(!a.length){ $('peer-body').innerHTML='<div class="card"><div class="empty"><h3>No peer reviews this cycle</h3><p>When you are asked to assess colleagues, they appear here for you to complete in any order.</p></div></div>'; return; }
+  $('peer-body').innerHTML='<p class="hint">You choose who to do first. Each one stays open until you submit it.</p>'+a.map(x=>{
+    const url='peer_appraisal.html?t='+encodeURIComponent(TOKEN)+'&target='+encodeURIComponent(x.target)+'&cycle='+encodeURIComponent(CYCLE);
+    return '<div class="prow"><div class="pav">'+esc(initials(x.target))+'</div>'
+      +'<div class="pinfo"><div class="pn">'+esc(x.target)+'</div><div style="margin-top:4px">'
+      +(x.done?'<span class="pill done">Done</span>':'<span class="pill todo">To do</span>')+'</div></div>'
+      +'<a class="btn '+(x.done?'':'peer')+'" target="_blank" rel="noopener" href="'+url+'">'+(x.done?'Review':'Start')+'</a></div>';
+  }).join('');
+}
+function renderPip(d){
+  const pips=(d&&d.pips)||[];
+  $('c-pip').textContent=pips.length?String(pips.length):'None';
+  if(!pips.length){ $('pip-body').innerHTML='<div class="card"><div class="empty"><div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div><h3>No active PIP</h3><p>You are in good standing. If a performance plan is ever opened with you, it shows up here.</p></div></div>'; return; }
+  $('pip-body').innerHTML='<div class="sec">Your performance plan</div>'+pips.map(p=>{
+    const row=(k,v)=>v?'<span class="k">'+k+'</span><span class="v">'+esc(v)+'</span>':'';
+    return '<div class="card"><div class="qt" style="font-weight:700">'+esc(p.severity||'Performance plan')+(p.filed?'':' <span class="pill todo" style="margin-left:6px">In progress</span>')+'</div>'
+      +'<div class="kv">'+row('Started',p.start_date)+row('Review date',p.review_date)+row('Result',p.result)+row('Verdict',p.verdict)+'</div></div>';
+  }).join('');
+}
+
+/* ---- boot ---- */
+(function(){
+  if(!TOKEN){ $('gate').hidden=false; return; }
+  api('/whoami?t='+encodeURIComponent(TOKEN)).then(d=>{
+    if(!d||!d.found){ $('gate').hidden=false; return; }
+    $('app').hidden=false;
+    $('who').textContent=d.name||'My reviews';
+    $('avatar').textContent=initials(d.name);
+    const h=(location.hash||'').replace('#','');
+    show(['kpi','peer','pip'].indexOf(h)>=0?h:'kpi');
+    api('/kpi/mine?t='+encodeURIComponent(TOKEN)).then(renderKpi).catch(()=>{$('kpi-body').innerHTML='<div class="loading">Could not load your KPI history. Try again in a moment.</div>';});
+    api('/peer/my-assignments?t='+encodeURIComponent(TOKEN)+'&cycle='+encodeURIComponent(CYCLE)).then(renderPeer).catch(()=>{$('peer-body').innerHTML='<div class="loading">Could not load your peer assignments.</div>';});
+    api('/pip/mine?t='+encodeURIComponent(TOKEN)).then(renderPip).catch(()=>{$('pip-body').innerHTML='<div class="loading">Could not load your PIP.</div>';});
+  }).catch(()=>{ $('gate').hidden=false; });
+})();
+</script>
+</body>
+</html>

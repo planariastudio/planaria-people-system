@@ -20788,6 +20788,35 @@ async function handleMyPeerAssignments(env, token, cycle) {
   });
 }
 __name(handleMyPeerAssignments, "handleMyPeerAssignments");
+// The editor's own filed KPI history, by personal token, for the portal's My KPI
+// tab. Token-gated exactly like handleWhoAmI: personFromToken resolves the token to
+// one roster row, and the query is scoped to that person (editor_id is the roster
+// id on newer cases, editor_name on older ones), finalized only. Never returns
+// anyone else's, and needs no supervisor key.
+async function handleMyKpi(env, token) {
+  const person = await personFromToken(env, token);
+  if (!person) return json({ found: false });
+  const q = `?or=(editor_id.eq.${encodeURIComponent(person.id)},editor_name.eq.${encodeURIComponent(person.name)})&finalized=eq.true&select=id,quarter,official_kpi,self_overall,level&order=quarter.desc`;
+  const rows = await sbSelect(env, "kpi_case", q);
+  return json({ found: true, name: person.name, level: rows[0] ? rows[0].level : null, cases: rows });
+}
+__name(handleMyKpi, "handleMyKpi");
+// The editor's own PIP(s), by personal token, for the portal's My PIP tab. pip_case
+// keys editor_id on the roster slug (see handlePipOpen), so resolve the token to a
+// person, then their slug, then scope to it. Only ever the caller's own PIPs.
+async function handleMyPip(env, token) {
+  const person = await personFromToken(env, token);
+  if (!person) return json({ found: false });
+  const slug = await editorSlug(env, person.name);
+  const key = slug || person.name;
+  const rows = await sbSelect(env, "pip_case", `?editor_id=eq.${encodeURIComponent(key)}&order=updated_at.desc&select=id,severity,start_date,review_date,result,verdict,detail`);
+  const pips = rows.map((r) => ({
+    id: r.id, severity: r.severity, start_date: r.start_date, review_date: r.review_date,
+    result: r.result, verdict: r.verdict, filed: !!(r.detail && r.detail._filed)
+  }));
+  return json({ found: true, pips });
+}
+__name(handleMyPip, "handleMyPip");
 async function handleConfig(env) {
   const [roster, levels, kpi_rubric, peer_rubric, pip_rubric, lists] = await Promise.all([
     sbSelect(env, "roster", "?active=eq.true&select=id,name,level,track"),
@@ -21040,36 +21069,26 @@ async function handleKpiFinalize(env, body) {
     clickupResolveUserId(env, kpiCase.editor_name)
   ]);
   const qr = quarterRange(kpiCase.quarter);
+  // "Filed ✓" is the name a person sees when their KPI is done, so it must only ever
+  // appear once the case is genuinely filed. The rename to it is therefore the LAST
+  // thing this function does -- after Supabase records finalized (the source of
+  // truth) and the PDF is attached. Davin's Q3 filed with the rename FIRST: the
+  // rename succeeded, clickupAttachPdf then threw, and finalized was never written,
+  // so the task showed "Filed ✓" over a case that wasn't filed and had no PDF.
+  // Ordering the rename last makes the visible label follow the data, never lead it.
   const finalName = `KPI \xB7 ${kpiCase.editor_name} \xB7 ${kpiCase.quarter} \xB7 Filed ✓`;
+  const interimName = `KPI \xB7 ${kpiCase.editor_name} \xB7 ${kpiCase.quarter}`;
   const finalMd = kpiTaskMd(payload);
   // One task for the whole KPI cycle: reuse the self-review task created when the
-  // link was issued (already renamed once at lock) instead of spinning up a second
-  // "filed" task alongside it. Only falls back to creating a fresh task if this
-  // case was never linked to one -- e.g. a supervisor filed it without the editor
-  // ever going through the admin "Add task in ClickUp" flow.
-  let task;
+  // link was issued instead of spinning up a second one. Only creates a fresh task
+  // if this case was never linked to one (a supervisor filed without the editor
+  // going through the admin "Add task in ClickUp" flow). Either branch leaves the
+  // task NOT yet named "Filed ✓".
+  let taskId;
   if (kpiCase.reminder_task_id) {
-    // clickupUpdateTask swallows failures and returns null (by design -- most
-    // callers treat it as best-effort). This rename is NOT best-effort: it's the
-    // only thing that actually marks the case "Filed ✓" in ClickUp. Silently
-    // falling back to the old task reference on failure made handleKpiFinalize
-    // report {ok:true} while ClickUp still showed the case sitting unfiled in
-    // To-do -- caught via system_check.html. One retry, then a real error.
-    const tryUpdate = () => clickupUpdateTask(env, kpiCase.reminder_task_id, {
-      name: finalName, description: finalMd, markdown_description: finalMd,
-      priority: bandPriority(official), due_date: qr ? qr.end : null, start_date: qr ? qr.start : null
-    });
-    let updated = await tryUpdate();
-    if (!updated) {
-      await new Promise((r) => setTimeout(r, 900));
-      updated = await tryUpdate();
-    }
-    if (!updated) throw new Error(`ClickUp rejected filing this case (task ${kpiCase.reminder_task_id} would not rename to "Filed ✓" after a retry) -- the case is NOT actually filed. Try again in a moment.`);
-    task = updated;
+    taskId = kpiCase.reminder_task_id;
   } else {
-    // Rare fallback: a supervisor filed a case that never went through the
-    // admin "Add task in ClickUp" flow, so there's no existing task to rename.
-    task = await clickupCreateTaskInList(env, listId, finalName, {
+    const task = await clickupCreateTaskInList(env, listId, interimName, {
       assignees: assigneeId ? [assigneeId] : null,
       markdown_description: finalMd,
       start_date: qr ? qr.start : null,
@@ -21077,34 +21096,34 @@ async function handleKpiFinalize(env, body) {
       priority: bandPriority(official),
       tags: ["KPI", qr ? qr.tag : null].filter(Boolean)
     });
-    // Persist immediately -- same reasoning as the PIP fix: if attachPdf or
-    // anything below throws, this freshly-created task must not be orphaned
-    // (a real ClickUp task Supabase never learns about, so Remove can never
-    // find it). The full row write still happens normally at the end on success.
-    try { await sbPatch(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}`, { clickup_task_id: task.id, reminder_task_id: task.id }); } catch (e) {}
+    taskId = task.id;
+    // Persist immediately so a throw below can't orphan a real ClickUp task that
+    // Supabase never learns about (Remove could then never find it).
+    try { await sbPatch(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}`, { clickup_task_id: taskId, reminder_task_id: taskId }); } catch (e) {}
   }
-  await clickupAttachPdf(env, task.id, `KPI_Result_${kpiCase.editor_name.replace(/\s+/g, "_")}_${kpiCase.quarter}.pdf`, pdf);
+  // Attach the PDF BEFORE finalizing, so a finalized case always has its record PDF.
+  // If this throws, nothing has been labelled "Filed ✓" and the case stays unfiled
+  // -- a clean retry, not a misleading green check.
+  await clickupAttachPdf(env, taskId, `KPI_Result_${kpiCase.editor_name.replace(/\s+/g, "_")}_${kpiCase.quarter}.pdf`, pdf);
   // Filed = no longer something the person has to do, so move it out of their
-  // To-do list and into the KPI list where the quarter's record belongs. Needs
-  // the Tasks-in-Multiple-Lists ClickApp; if that's off, `added` is false and we
-  // deliberately DON'T remove it from To-do -- removing without a successful add
-  // would strand the task in no list at all. Worst case it stays in To-do marked
-  // "Filed ✓" and Complete, which is still correct, just less tidy.
+  // To-do list and into the KPI list. Needs the Tasks-in-Multiple-Lists ClickApp;
+  // if off, `added` is false and we DON'T remove it from To-do (removing without a
+  // successful add would strand the task in no list at all).
   const todoListId = await resolveEditorList(env, kpiCase.editor_id, kpiCase.editor_name, "todo");
   let homeListId = todoListId || listId;
   if (todoListId && listId && todoListId !== listId) {
-    const added = await clickupAddTaskToList(env, listId, task.id);
+    const added = await clickupAddTaskToList(env, listId, taskId);
     if (added) {
-      await clickupRemoveTaskFromList(env, todoListId, task.id);
+      await clickupRemoveTaskFromList(env, todoListId, taskId);
       homeListId = listId;
     }
   }
-  try { await clickupSetStatus(env, task.id, homeListId, "complete"); } catch (e) {}
+  try { await clickupSetStatus(env, taskId, homeListId, "complete"); } catch (e) {}
   for (const f of (payload.focus || [])) {
     if (!f || !f.area) continue;
     try {
       await clickupCreateTaskInList(env, listId, `Focus \xB7 ${String(f.area).slice(0, 110)}`, {
-        parent: task.id,
+        parent: taskId,
         assignees: assigneeId ? [assigneeId] : null,
         priority: FOCUS_PRIO[f.priority] || 3,
         due_date: qr ? qr.nextEnd : null,
@@ -21113,13 +21132,26 @@ async function handleKpiFinalize(env, body) {
     } catch (e) {}
   }
 
-  // PATCH (not upsert): row already exists; a partial upsert trips the editor_name NOT NULL check.
-  await sbPatch(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}`, { official_kpi: official, finalized: true, clickup_task_id: task.id, reminder_task_id: task.id, detail: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+  // SOURCE OF TRUTH. PATCH (not upsert): the row already exists; a partial upsert
+  // trips the editor_name NOT NULL check.
+  await sbPatch(env, "kpi_case", `?id=eq.${encodeURIComponent(body.id)}`, { official_kpi: official, finalized: true, clickup_task_id: taskId, reminder_task_id: taskId, detail: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
   // Case id goes LAST (matches KPI_RAW_HEADERS' trailing "Case ID" column) --
   // never first, so an already-live sheet's existing columns/formulas never
   // shift. It's what the sheet script upserts and later deletes by.
-  await pushToSheet(env, "KPI", { id: body.id, values: [(/* @__PURE__ */ new Date()).toISOString(), kpiCase.editor_name, kpiCase.level, kpiCase.quarter, official, kpiCase.self_overall, task.id, JSON.stringify(payload), body.id] });
-  return json({ ok: true, official_kpi: official, clickup_task_id: task.id });
+  await pushToSheet(env, "KPI", { id: body.id, values: [(/* @__PURE__ */ new Date()).toISOString(), kpiCase.editor_name, kpiCase.level, kpiCase.quarter, official, kpiCase.self_overall, taskId, JSON.stringify(payload), body.id] });
+  // LAST and cosmetic: flip the task name to "Filed ✓" and stamp its filed detail.
+  // The case is ALREADY filed above, so a rename failure must not throw the request
+  // into a 500 over a case that really did file. clickupUpdateTask returns null on
+  // failure; we retry once and, if it still won't take, return ok with label_pending
+  // so the form can say "filed, label catching up" rather than show an error. Worst
+  // case the task keeps its interim name: less tidy, still correct and still filed.
+  const relabel = () => clickupUpdateTask(env, taskId, {
+    name: finalName, description: finalMd, markdown_description: finalMd,
+    priority: bandPriority(official), due_date: qr ? qr.end : null, start_date: qr ? qr.start : null
+  });
+  let labelled = await relabel();
+  if (!labelled) { await new Promise((r) => setTimeout(r, 900)); labelled = await relabel(); }
+  return json({ ok: true, official_kpi: official, clickup_task_id: taskId, label_pending: labelled ? undefined : true });
 }
 __name(handleKpiFinalize, "handleKpiFinalize");
 function peerTaskMd(agg, overallMean, slug) {
@@ -22126,6 +22158,12 @@ var index_default = {
       }
       if (path === "/peer/my-assignments" && request.method === "GET") {
         return await handleMyPeerAssignments(env, url.searchParams.get("t"), url.searchParams.get("cycle"));
+      }
+      if (path === "/kpi/mine" && request.method === "GET") {
+        return await handleMyKpi(env, url.searchParams.get("t"));
+      }
+      if (path === "/pip/mine" && request.method === "GET") {
+        return await handleMyPip(env, url.searchParams.get("t"));
       }
       if (path === "/kpi/next-id" && request.method === "GET") {
         if (!spv && !isSelf(await me(), url.searchParams.get("editor"))) return denied();

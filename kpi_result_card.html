@@ -35,7 +35,9 @@ const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
     // or an editor opening their own result with ?e=<personal token>.
     const hdr={};
     const tok=new URLSearchParams(location.search).get('e');if(tok)hdr['x-editor-token']=tok;
-    try{const k=sessionStorage.getItem('kpiSpvKey');if(k)hdr['x-spv-key']=k;}catch(e){}
+    // Prefer the shared, expiring supervisor store (set by the KPI/PIP forms, works
+    // across tabs today), then fall back to the legacy per-tab key.
+    try{let k='';const raw=localStorage.getItem('pplSpvAuth');if(raw){const o=JSON.parse(raw);if(o&&o.k&&o.exp&&Date.now()<o.exp)k=o.k;}if(!k)k=sessionStorage.getItem('kpiSpvKey')||'';if(k)hdr['x-spv-key']=k;}catch(e){}
     const r=await fetch(`${WORKER_URL}/kpi/${encodeURIComponent(id)}`,{headers:hdr});
     if(r.status===401){
       document.getElementById('root').innerHTML=`<div class="empty">This result is private. Open it from the supervisor form after entering the supervisor password, or from your own personal KPI link.</div>`;
